@@ -1,0 +1,87 @@
+.shared-annotation-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: .4rem .75rem;
+  padding: .5rem 0;
+  color: var(--mw-ink, inherit);
+  font-size: .875rem;
+}
+.shared-annotation-controls:has(select[hidden]):not(:has(output:not(:empty))) { display: none; }
+.shared-annotation-controls output:empty { display: none; }
+.shared-annotation-controls output:last-child { flex-basis: 100%; }
+.shared-annotation-picker { flex: none; }
+.shared-annotation-picker > button, .workspace-midi-control, .workspace-midi-upload, .shared-annotation-controls select {
+  min-height: 2rem;
+  padding: .25rem .5rem;
+  border: 1px solid var(--mw-line, currentColor);
+  border-radius: 5px;
+  background: var(--mw-paper, Canvas);
+  color: var(--mw-ink, CanvasText);
+  font: inherit;
+}
+.shared-annotation-picker > button { font-weight: 650; cursor: pointer; }
+.workspace-midi-source { display: flex; gap: 6px; align-items: center; min-width: 0; }
+.workspace-midi-upload { flex: none; font-weight: 650; cursor: pointer; }
+.workspace-midi-upload:hover:not(:disabled) { background: var(--mw-accent-soft, ButtonFace); }
+.workspace-midi-upload:disabled { opacity: .55; cursor: default; }
+.workspace-midi-control {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 19rem;
+  min-width: 0;
+  padding-block: 0;
+}
+.workspace-midi-control span { flex: none; font-weight: 650; white-space: nowrap; }
+.workspace-midi-control .workspace-midi-picker {
+  flex: 1;
+  width: 0;
+  min-width: 0;
+  min-height: 2rem;
+  padding-inline: .3rem 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-overflow: ellipsis;
+}
+.workspace-midi-picker option, .workspace-midi-picker optgroup { background: var(--mw-paper, Canvas); }
+.shared-annotation-menu {
+  position: fixed;
+  position-area: block-end span-inline-end;
+  inset: auto;
+  margin: .25rem 0;
+  width: max-content;
+  max-width: calc(100vw - 24px);
+  max-height: min(45vh, 24rem);
+  overflow-y: auto;
+  padding: .35rem;
+  border: 1px solid var(--mw-line);
+  border-radius: var(--mw-radius);
+  background: var(--mw-surface);
+  color: var(--mw-ink);
+  box-shadow: 0 6px 22px #0002;
+}
+.shared-annotation-menu > :is(button, span) {
+  display: block;
+  width: 100%;
+  padding: .45rem .65rem;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: inherit;
+  text-align: start;
+  white-space: normal;
+}
+.shared-annotation-menu > button:hover { background: var(--mw-accent-soft); }
+.shared-annotation-menu > .annotation-menu-heading {
+  color: var(--mw-muted, inherit);
+  font-size: .8rem;
+  font-weight: 650;
+}
+.shared-annotation-menu > button + .annotation-menu-heading {
+  margin-top: .25rem;
+  border-top: 1px solid var(--mw-line);
+  border-radius: 0;
+}

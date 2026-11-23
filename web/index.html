@@ -1,0 +1,132 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#f5f5fa">
+  <title>MusicWord 工作台</title>
+  <link rel="stylesheet" href="./tabs.css">
+  <link rel="stylesheet" href="./shared-annotations.css">
+  <script defer src="./music-preview/preview.js"></script>
+  <script type="module" src="./tabs.js"></script>
+</head>
+<body>
+  <header class="workspace-bar">
+    <div class="workspace-topline">
+    <h1>MusicWord</h1>
+    <nav class="tabs" role="tablist" aria-label="MusicWord 工作台">
+      <button id="annotation" type="button" role="tab" aria-controls="bpe-panel" aria-selected="true" data-mode="annotation">标注</button>
+      <button id="bpe-run" type="button" role="tab" aria-controls="bpe-panel" aria-selected="false" tabindex="-1" data-mode="algorithm">BPE</button>
+      <button id="ssm" type="button" role="tab" aria-controls="ssm-panel" aria-selected="false" tabindex="-1">SSM</button>
+      <button id="activebasis" type="button" role="tab" aria-controls="activebasis-panel" aria-selected="false" tabindex="-1">ActiveBasis</button>
+      <button id="lego" type="button" role="tab" aria-controls="lego-panel" aria-selected="false" tabindex="-1">LEGO</button>
+    </nav>
+    <div id="parameter-presets" class="workspace-presets" role="group" aria-label="参数预设"></div>
+    <button class="audio-toggle" type="button" popovertarget="workspace-audio" aria-label="试听设置">试听</button>
+    <div id="workspace-audio" class="workspace-audio" data-musicword-preview></div>
+    <div class="theme-switch" role="group" aria-label="外观">
+      <button type="button" data-theme-choice="light" aria-pressed="false">明亮</button>
+      <button type="button" data-theme-choice="dark" aria-pressed="false">暗黑</button>
+    </div>
+    </div>
+    <div id="parameter-status" class="preset-feedback" role="status" aria-live="polite" hidden></div>
+    <div class="workspace-controls" hidden>
+      <div class="workspace-sources" role="group" aria-label="乐谱来源">
+        <div id="bpe-source-slot" class="workspace-source" hidden></div>
+        <div id="ssm-source-slot" class="workspace-source" hidden></div>
+        <div id="activebasis-source-slot" class="workspace-source" hidden></div>
+      </div>
+      <div id="bpe-round-slot" hidden></div>
+    </div>
+  </header>
+  <main class="workspace">
+    <section id="bpe-panel" role="tabpanel" aria-labelledby="annotation">
+      <iframe title="音乐词标注" data-src="./bpe/?workspace=1" allow="autoplay"></iframe>
+    </section>
+    <section id="ssm-panel" role="tabpanel" aria-labelledby="ssm" hidden>
+      <iframe title="SSM 工作台" data-src="./ssm/?workspace=1" data-toolbar="ssm" allow="autoplay"></iframe>
+    </section>
+    <section id="activebasis-panel" role="tabpanel" aria-labelledby="activebasis" hidden>
+      <iframe title="ActiveBasis 工作台" data-src="./activebasis/?workspace=1" data-toolbar="activebasis" allow="autoplay"></iframe>
+    </section>
+    <section id="lego-panel" role="tabpanel" aria-labelledby="lego" hidden>
+      <iframe title="LEGO 音词编排" data-src="./lego/" allow="autoplay"></iframe>
+    </section>
+    <noscript>请启用 JavaScript 以切换工作台。</noscript>
+  </main>
+  <template id="parameter-preset-template">
+    <div class="parameter-preset-group" role="group">
+      <label class="preset-scope-label"></label>
+      <select class="preset-select"><option value="">选择预设</option></select>
+      <button class="preset-import" type="button">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 8V5a1 1 0 0 1 1-1h5l3 3h8a1 1 0 0 1 1 1v3M3 8h6l3 3h9a1 1 0 0 1 1 1l-3 8H2L1 9a1 1 0 0 1 1-1z"/></svg>
+      </button>
+      <input class="preset-file" type="file" accept=".json,application/json" hidden>
+      <button class="preset-save" type="button">保存</button>
+      <div class="preset-save-popover" popover="auto">
+        <form class="preset-save-form">
+          <strong class="preset-save-heading"></strong>
+          <label class="preset-name-label">预设名称<input class="preset-name" type="text" maxlength="80" placeholder="输入名称，留空自动命名" autofocus></label>
+          <p class="preset-save-note">保存到预设列表，同时下载配置文件。</p>
+          <div class="preset-save-actions"><button class="preset-cancel" type="button">取消</button><button class="preset-confirm" type="submit">保存预设</button></div>
+        </form>
+      </div>
+    </div>
+  </template>
+  <template id="panel-toolbar-style">
+    <style>
+      :root[data-workspace-toolbar] :is(.masthead, .topbar-inner) {
+        display: flex;
+        align-items: center;
+        justify-content: flex-start;
+        flex-wrap: nowrap;
+        gap: 12px;
+        min-height: 48px;
+        padding: 5px var(--mw-workspace-gutter);
+        overflow-x: auto;
+        scrollbar-width: thin;
+      }
+
+      :root[data-workspace-toolbar="ssm"] .masthead .brand,
+      :root[data-workspace-toolbar="activebasis"] .topbar .brand :is(.brand-mark, strong) {
+        display: none;
+      }
+
+      :root[data-workspace-toolbar="ssm"] .masthead-source,
+      :root[data-workspace-toolbar="ssm"] .masthead-source > label,
+      :root[data-workspace-toolbar="ssm"] .masthead-source .upload {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        white-space: nowrap;
+      }
+
+      :root[data-workspace-toolbar="ssm"] .masthead-source { gap: 12px; width: auto; }
+      :root[data-workspace-toolbar="ssm"] #example { width: clamp(140px, 22vw, 270px); }
+      :root[data-workspace-toolbar="ssm"] #track { width: clamp(100px, 15vw, 180px); }
+      :root[data-workspace-toolbar="ssm"] .upload-picker { max-width: 170px; }
+      :root[data-workspace-toolbar="ssm"] #export { white-space: nowrap; }
+
+      :root[data-workspace-toolbar="activebasis"] .topbar .round-bar {
+        order: 0;
+        flex: 1 0 190px;
+        max-width: 540px;
+      }
+
+      :root[data-workspace-toolbar="activebasis"] .topbar :is(.score-controls, #kernel-controls) {
+        order: 0;
+        flex: none;
+        flex-wrap: nowrap;
+      }
+
+      @media (max-width: 700px) {
+        :root[data-workspace-toolbar="activebasis"] { --scroll-offset: calc(var(--topbar-height) + 12px); }
+        :root[data-workspace-toolbar="activebasis"] .topbar-inner > .mobile-stage { flex: none; white-space: nowrap; }
+        :root[data-workspace-toolbar="activebasis"] :is(.topbar .brand, .layout > .sidebar) { display: none; }
+        :root[data-workspace-toolbar="activebasis"] #stage-matches { scroll-margin-top: var(--scroll-offset); }
+        :root[data-workspace-toolbar="activebasis"] :is(#stage-matches, #stage-learning) .transport { top: var(--topbar-height); }
+      }
+    </style>
+  </template>
+</body>
+</html>

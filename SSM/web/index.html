@@ -1,0 +1,218 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>MusicWord / SSM 自相似分析</title>
+  <link rel="stylesheet" href="style.css">
+  <script src="music-preview/preview.js" defer></script>
+  <script src="app.js" defer></script>
+</head>
+<body>
+  <header class="masthead" data-musicword-preview>
+    <div class="brand"><span class="mark" aria-hidden="true"><i></i><i></i><i></i></span> MusicWord <span class="slash">/</span> SSM</div>
+    <div class="masthead-source" role="group" aria-label="乐谱来源">
+      <div id="localSourceTools" hidden></div>
+      <label><span>示例</span><select id="example" form="settings"><option value="" hidden>自选乐谱</option><option value="elise" selected>贝多芬 · 致爱丽丝</option><option value="bach">巴赫 · E 大调前奏曲与赋格 BWV 854</option></select></label>
+      <div class="upload"><span>导入乐谱</span><label class="upload-picker"><span id="fileName">MIDI / MusicXML</span><input id="file" form="settings" type="file" aria-label="导入 MIDI 或 MusicXML" accept=".mid,.midi,.xml,.musicxml,.mxl"></label></div>
+      <label>音轨<select id="track" form="settings" name="track"></select></label>
+    </div>
+    <button id="export" type="button" class="outline" disabled>导出离线 HTML</button>
+  </header>
+  <main>
+    <header class="page-heading">
+      <div><h1>MIDI 自相似分析</h1><p id="summary">自相似矩阵按节拍比较同一音轨中的片段。</p></div>
+      <div id="status" role="status" aria-live="polite"></div>
+    </header>
+    <div class="workbench">
+      <section class="analysis-methods" aria-label="分析伪代码">
+        <details id="lineMethod" class="tree-method" open>
+          <summary>矩形与斜线检测算法</summary>
+          <div class="pseudocode" role="group" aria-label="矩形与斜线检测伪代码">
+          <div class="code-block">
+            <div class="code-line with-parameters"><code>矩阵 ← 计算相似度(音轨,</code><label class="inline-param"><span>算法</span><select data-param="mode"><option value="NCC">NCC</option><option value="SAD">SAD</option><option value="TEXTON">Texton</option></select></label><code>,</code><label class="inline-param stride-control"><span class="range-label">步长（拍）<output for="codeStride" data-stride-value>1</output></span><input id="codeStride" data-param="stride" type="range" min="0" max="8" step="1" value="5" aria-valuetext="1 拍"><span class="stride-ticks" aria-hidden="true"><span><span>1/32</span></span><span><span>1/16</span></span><span><span>1/8</span></span><span><span>1/4</span></span><span><span>1/2</span></span><span class="is-current"><span>1</span></span><span><span>2</span></span><span><span>4</span></span><span><span>8</span></span></span></label><code>)</code></div>
+            <div class="code-line with-parameters"><code>最短格数 ← max(2, ceil(</code><label class="inline-param"><span>最短匹配（拍）</span><input data-param="minBeats" type="number" min="1" max="10" value="4"></label><code>/</code><span class="inline-value">实际步长 <span id="codeEffectiveStride">1</span> 拍</span><code>))</code></div>
+          </div>
+          <div class="code-block">
+            <div class="code-line"><code><b>遍历</b> 下三角偏移 k = 行 − 列，k &gt; 0</code></div>
+            <div class="code-indent">
+            <div class="code-line with-parameters"><code>合格格子 ← 分数 &gt; 0 <b>且</b> 分数 ≥</code><label class="inline-param inline-threshold"><span>相似度阈值</span><input data-param="threshold" type="range" min="0" max="1" step=".01" value=".45"><output id="codeThresholdValue">0.45</output></label></div>
+            <div class="code-line"><code>连续段 ← 沿偏移 k 合并相邻的合格格子</code></div>
+            <div class="code-line"><code>格数 ≥ <span class="inline-value">最短格数 <span id="codeMinCells">4</span></span> 的连续段为匹配，剩余至少 2 格的连续段为短候选</code></div>
+            </div>
+          </div>
+          <div class="code-block">
+            <div class="code-line"><code><b>逐行更新</b> 各列向上连续的合格格数，用单调栈枚举无法向上或向左右扩展的矩形，再检查下一行</code></div>
+            <div class="code-line with-parameters"><code>矩形 ← 下三角中由合格格子填满、无法再扩展，且宽和高均 &gt;</code><label class="inline-param"><span>矩形边长阈值（拍）</span><input data-param="rectangleMinBeats" type="number" min="0" max="32768" step="any" value="2" required></label></div>
+          </div>
+          <div class="code-block">
+            <div class="code-line with-parameters"><code><b>若启用</b></code><label class="inline-param"><input data-param="splitOverlaps" type="checkbox" value="1">截断交叠</label></div>
+            <div class="code-indent">
+              <div class="code-line"><code><b>遍历</b> 两段时间有交叠的匹配斜线</code></div>
+              <div class="code-line"><code>切点 ← 较早片段到达较晚片段起点的位置</code></div>
+              <div class="code-line with-parameters"><code><b>丢弃</b> 长度低于</code><label class="inline-param"><span>截断片段下限（拍）</span><input data-param="splitMinBeats" type="number" min="0" max="10" step="any" value="2" required></label><code>的片段</code></div>
+              <div class="code-line"><code><b>继续截断</b> 仍有交叠的片段，直到剩余片段均无交叠</code></div>
+            </div>
+          </div>
+          <div class="code-block">
+            <div class="code-line with-parameters"><code><b>若启用</b></code><label class="inline-param"><input data-param="removeSelfSimilarity" type="checkbox" value="1">去除自相似</label></div>
+            <div class="code-indent">
+              <div class="code-line"><code><b>遍历</b> 匹配斜线与短候选，按格数从多到少，同长按检测顺序</code></div>
+              <div class="code-line"><code>包含它的矩形 ← 完全覆盖斜线首末格的所有矩形</code></div>
+              <div class="code-line"><code><b>若</b> 其中已有保留的斜线，跳过当前斜线</code></div>
+              <div class="code-line"><code><b>否则</b> 保留斜线，并标记包含它的每个矩形</code></div>
+            </div>
+            <div class="code-line"><code><b>输出</b> 矩形与保留的斜线，转置到上三角。短候选用虚线显示</code></div>
+          </div>
+          </div>
+          <p class="method-result" id="lineParams"></p>
+        </details>
+      </section>
+      <aside class="settings" aria-label="分析参数">
+        <div id="presetBar" class="preset-bar" hidden>
+          <label for="presetSelect">参数方案</label>
+          <select id="presetSelect"><option value="default">默认参数</option></select>
+          <button id="savePreset" class="outline" type="button" disabled>保存参数</button>
+          <span id="presetStatus" role="status"></span>
+        </div>
+        <form id="settings">
+          <input type="hidden" name="stride" value="1">
+          <section class="setting-group quantization-settings" aria-labelledby="quantizationHeading">
+            <h2 id="quantizationHeading">量化参数</h2>
+            <label class="stride-control"><span class="range-label">步长（拍）<output for="strideSlider" data-stride-value>1</output></span><input id="strideSlider" data-param="stride" type="range" min="0" max="8" step="1" value="5" aria-valuetext="1 拍"><span class="stride-ticks" aria-hidden="true"><span><span>1/32</span></span><span><span>1/16</span></span><span><span>1/8</span></span><span><span>1/4</span></span><span><span>1/2</span></span><span class="is-current"><span>1</span></span><span><span>2</span></span><span><span>4</span></span><span><span>8</span></span></span></label>
+            <div class="numeric-setting">
+              <label>每拍刻度<input name="tpb" type="number" min="1" max="96" value="12" required></label>
+              <input data-param="tpb" type="range" min="1" max="96" step="1" value="12" aria-label="每拍刻度滑动条">
+            </div>
+            <div class="numeric-setting">
+              <label>起音权重<input name="onsetWeight" type="number" min=".01" max="4" step="any" value="1" required></label>
+              <input data-param="onsetWeight" type="range" min=".01" max="4" step="0.01" value="1" aria-label="起音权重滑动条">
+            </div>
+            <div class="numeric-setting">
+              <label>延音权重<input name="durationWeight" type="number" min="0" max="4" step="any" value=".2" required></label>
+              <input data-param="durationWeight" type="range" min="0" max="4" step="0.01" value=".2" aria-label="延音权重滑动条">
+            </div>
+          </section>
+          <section class="setting-group blur-settings" aria-labelledby="blurHeading">
+            <h2 id="blurHeading">模糊参数</h2>
+            <div class="numeric-setting">
+              <label>高斯核尺寸<input name="blurSize" type="number" min="1" max="15" value="4" required></label>
+              <input data-param="blurSize" data-ticks="2" type="range" min="1" max="15" step="1" value="4" aria-label="高斯核尺寸滑动条">
+            </div>
+            <div class="numeric-setting">
+              <label>高斯标准差<input name="blurSigma" type="number" min=".1" max="16" step="any" value="1" required></label>
+              <input data-param="blurSigma" type="range" min=".1" max="16" step="0.01" value="1" aria-label="高斯标准差滑动条">
+            </div>
+          </section>
+          <section class="setting-group similarity-settings" aria-labelledby="similarityHeading">
+            <h2 id="similarityHeading">相似度参数</h2>
+            <label>相似度算法<select id="mode" name="mode"><option value="NCC">NCC · 归一化互相关</option><option value="SAD">SAD · 绝对差之和</option><option value="TEXTON">Texton · 单拍移调匹配</option></select></label>
+            <label><span class="range-label">相似度阈值 <output id="thresholdValue" for="threshold">0.45</output></span><input id="threshold" name="threshold" type="range" min="0" max="1" step=".01" value=".45"></label>
+            <div id="sadSetting" class="numeric-setting" hidden>
+              <label>SAD 衰减<input name="sadSigma" type="number" min=".01" max="32" step="any" value="1" required disabled></label>
+              <input data-param="sadSigma" type="range" min=".01" max="32" step="0.01" value="1" aria-label="SAD 衰减滑动条" disabled>
+            </div>
+          </section>
+          <section class="setting-group structure-settings" aria-labelledby="structureHeading">
+            <h2 id="structureHeading">结构分析</h2>
+            <div class="numeric-setting">
+              <label>匹配至少（拍）<input id="minBeats" name="minBeats" type="number" min="1" max="10" value="4" required></label>
+              <input data-param="minBeats" data-ticks="1" type="range" min="1" max="10" step="1" value="4" aria-label="匹配至少（拍）滑动条">
+            </div>
+            <div class="numeric-setting">
+              <label>独有片段下限（拍）<input name="uniqueMinBeats" type="number" min="1" max="10" value="4" required></label>
+              <input data-param="uniqueMinBeats" data-ticks="1" type="range" min="1" max="10" step="1" value="4" aria-label="独有片段下限（拍）滑动条">
+            </div>
+            <div class="numeric-setting">
+              <label>补齐片段下限（拍）<input name="fillMinBeats" type="number" min="0" max="10" value="0" required></label>
+              <input data-param="fillMinBeats" data-ticks="1" type="range" min="0" max="10" step="1" value="0" aria-label="补齐片段下限（拍）滑动条">
+            </div>
+            <div class="numeric-setting">
+              <label>截断片段下限（拍）<input name="splitMinBeats" type="number" min="0" max="10" step="any" value="2" required></label>
+              <input data-param="splitMinBeats" type="range" min="0" max="10" step=".25" value="2" aria-label="截断片段下限（拍）滑动条">
+            </div>
+            <div class="numeric-setting">
+              <label>矩形边长阈值（拍）<input name="rectangleMinBeats" type="number" min="0" max="32768" step="any" value="2" required></label>
+              <input data-param="rectangleMinBeats" type="range" min="0" max="10" step=".25" value="2" aria-label="矩形边长阈值（拍）滑动条">
+            </div>
+            <input id="splitOverlaps" name="splitOverlaps" type="checkbox" value="1" checked hidden>
+            <input id="removeSelfSimilarity" name="removeSelfSimilarity" type="checkbox" value="1" checked hidden>
+            <div class="structure-toggles">
+              <button id="splitOverlapsButton" class="outline toggle-button" type="button" aria-pressed="true">截断交叠</button>
+              <button id="removeSelfSimilarityButton" class="outline toggle-button" type="button" aria-pressed="true">去除自相似</button>
+              <button id="padTreeParents" class="outline toggle-button" type="button" aria-pressed="true" disabled>补充父节点</button>
+            </div>
+          </section>
+        </form>
+        <p id="offlineNote" hidden>离线报告包含本次计算的参数和结果。重新计算可在本地工作台完成。</p>
+      </aside>
+      <section class="visuals" aria-label="音乐可视化">
+        <section id="treePanel" class="tree-panel" aria-labelledby="treeHeading">
+          <div class="plot-title">
+            <h2 id="treeHeading">结构树</h2>
+          </div>
+          <div id="treeChart" class="tree-chart"><div id="treeLinks" aria-hidden="true"></div><div id="treeCursor" aria-hidden="true"></div><div id="treeNodes" aria-label="按时间和自底向上层级排列的结构节点"></div></div>
+        </section>
+        <div class="roll-dock">
+          <div class="plot-title roll-title">
+            <div class="roll-heading">
+              <h2>钢琴卷帘</h2>
+              <div class="roll-audition" role="group" aria-label="试听片段">
+                <button id="playA" class="outline label-a" type="button" disabled>听 A</button>
+                <button id="playB" class="outline label-b" type="button" disabled>听 B</button>
+              </div>
+            </div>
+            <button id="play" class="outline" type="button" disabled>播放音轨</button>
+          </div>
+          <div class="roll-plot"><canvas id="roll" aria-label="钢琴卷帘 MIDI 音符"></canvas><canvas id="rollCursor" aria-hidden="true"></canvas></div>
+        </div>
+        <div id="sharedAnnotationMount"></div>
+        <section id="metricHistory" class="metric-history" aria-labelledby="metricHistoryTitle" hidden>
+          <div class="plot-title">
+            <h2 id="metricHistoryTitle">匹配指标曲线</h2>
+            <span id="metricPoint"></span>
+          </div>
+          <canvas id="metricChart" tabindex="0" role="img" aria-label="匹配指标随计算次数变化，按左右方向键查看各次结果"></canvas>
+          <ul id="metricLegend" class="metric-legend" aria-label="指标与数值"></ul>
+        </section>
+        <section id="annotationPanel" aria-label="人工标注可视化" hidden>
+          <div class="plot-title"><h2>标注结构树</h2></div>
+          <div id="annotationTree" class="tree-chart">
+            <div class="annotation-tree-links" aria-hidden="true"></div>
+            <div class="annotation-tree-nodes"></div>
+          </div>
+          <div class="plot-title">
+            <h2>标注钢琴卷帘</h2>
+            <span id="annotationRollLayer"></span>
+          </div>
+          <div class="roll-plot">
+            <canvas id="annotationRoll" aria-label="标注钢琴卷帘，彩色方框表示所选层的标注片段"></canvas>
+            <canvas id="annotationPlayhead" aria-hidden="true"></canvas>
+          </div>
+        </section>
+        <div class="plot-title matrix-title">
+          <div class="matrix-heading">
+            <h2 id="matrixTitle">自相似矩阵</h2><span id="matchCount" role="status"></span>
+            <span id="shortMatchCount" hidden></span><span id="rectangleCount" hidden></span>
+            <span id="removedLineCount" role="status" hidden></span>
+            <span class="matrix-zoom-hint">Ctrl + 滚轮缩放 · 放大后左键拖动</span>
+          </div>
+          <div class="matrix-actions">
+            <button id="resetMatrixView" class="outline toggle-button" type="button" aria-controls="matrix" hidden>视图回正</button>
+            <button id="showRectangles" class="outline toggle-button" type="button" aria-pressed="false" aria-controls="matrix">显示矩形框</button>
+            <button id="raw" class="outline toggle-button" type="button" aria-pressed="false">显示原始 SSM</button>
+          </div>
+        </div>
+        <div id="matrixError" hidden><span id="matrixErrorMessage"></span> <button id="retryStride" class="outline" type="button" hidden></button></div>
+        <div class="matrix-wrap">
+          <canvas id="matrix" tabindex="0" aria-label="自相似矩阵。按住 Ctrl 滚动鼠标滚轮缩放，放大后按住左键拖动。纵轴左侧显示卷帘缩略图。方向键查看比对位置。上三角可按 Enter 选中附近的斜线或格子，下三角提供镜像预览。"></canvas>
+          <canvas id="thumbnailCursor" aria-hidden="true"></canvas>
+          <canvas id="overlay" aria-hidden="true"></canvas>
+          <div id="matrixTooltip" class="matrix-tooltip" aria-hidden="true" hidden><span id="tooltipA" class="label-a"></span><span id="tooltipB" class="label-b"></span><strong id="tooltipScore"></strong><small id="tooltipFilter"></small><small id="tooltipMatch" hidden></small><strong id="tooltipRectangleSize" hidden></strong><small id="tooltipRectangleRemoved" hidden></small></div>
+        </div>
+        <div class="matrix-footer"><output id="cell">悬浮查看 A、B 比对位置，点击选中附近的匹配斜线。</output><output id="overlapStatus" hidden></output><span class="legend"><span id="legendMin">0</span><i id="gradient"></i><span>1</span></span></div>
+      </section>
+    </div>
+  </main>
+</body>
+</html>

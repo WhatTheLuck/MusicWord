@@ -1,0 +1,12 @@
+{
+  "name": "musicword-workspace",
+  "private": true,
+  "engines": {
+    "node": ">=22.12.0"
+  },
+  "scripts": {
+    "prestart": "node setup.mjs",
+    "start": "node workspace.mjs",
+    "test": "node --test parameter-preset-store.test.mjs"
+  }
+}

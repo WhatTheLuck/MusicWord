@@ -1,0 +1,149 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>LEGO · MusicWord</title>
+  <link rel="stylesheet" href="./studio.css">
+  <script defer src="../ActiveBasis/web/public/music-preview/preview.js"></script>
+  <script defer src="./bank.js"></script>
+  <script defer src="./music.js"></script>
+  <script defer src="./studio.js"></script>
+</head>
+<body>
+  <main class="workspace" aria-label="LEGO">
+    <section class="library" aria-labelledby="library-title">
+      <div class="library-header">
+        <div class="heading-group"><h2 id="library-title">音词库</h2><span id="word-count" class="numeric"></span></div>
+        <select id="library-source" aria-label="音词库来源">
+          <option value="hw">HW-Music Pattern</option>
+          <option value="pop909">POP909 标注词典</option>
+          <option value="saved">已保存标注词典</option>
+        </select>
+        <select id="library-song" aria-label="按曲目筛选音词" hidden></select>
+        <input id="search" type="search" placeholder="搜索音词名称或编号" aria-label="搜索音词名称或编号">
+        <div class="library-pages">
+          <button id="previous-page" type="button">上一页</button>
+          <span id="page-count" class="numeric"></span>
+          <button id="next-page" type="button">下一页</button>
+        </div>
+      </div>
+      <div id="word-list" class="word-list" role="group" aria-label="音词"></div>
+    </section>
+
+    <div class="session">
+      <section class="composer" aria-labelledby="composer-title">
+        <div class="section-heading editor-heading">
+          <div class="heading-group"><h2 id="composer-title">片段编辑器</h2><span id="editor-mode" class="tag">草稿</span></div>
+          <div id="clip-actions" class="clip-actions" hidden>
+            <button id="delete-clip" type="button">移除</button>
+            <button id="close-clip" type="button">返回草稿</button>
+          </div>
+        </div>
+
+        <div class="ingredients">
+          <section id="word-drop" class="ingredient word-ingredient" aria-labelledby="word-title">
+            <div class="ingredient-label"><h3 id="word-title">音乐单词</h3><span id="word-id" class="numeric"></span></div>
+            <div class="word-display">
+              <strong id="word-name"></strong><span id="word-length"></span>
+            </div>
+            <button type="button" id="word-surface" class="plot-surface audible" aria-label="试听当前音词">
+              <canvas id="word-roll" aria-hidden="true"></canvas>
+            </button>
+            <div class="field-grid word-fields">
+              <label>F 翻转<select id="flip"><option value="none">原形</option><option value="horizontal">左右</option><option value="vertical">上下</option><option value="diagonal">对角</option></select></label>
+              <div class="numeric-field" title="数值越大，单位时间内的起音越密">
+                <label for="density">A 密度</label>
+                <div class="numeric-choice">
+                  <input id="density" type="text" inputmode="decimal" role="combobox" aria-autocomplete="none" aria-expanded="false" aria-controls="density-choices" value="1">
+                  <span aria-hidden="true">×</span>
+                  <button type="button" tabindex="-1" aria-label="展开 A 密度选项"></button>
+                  <div id="density-choices" class="numeric-options" role="listbox" aria-label="A 密度选项" hidden></div>
+                </div>
+              </div>
+              <div class="numeric-field">
+                <label for="decay">D 时值</label>
+                <div class="numeric-choice">
+                  <input id="decay" type="text" inputmode="decimal" role="combobox" aria-autocomplete="none" aria-expanded="false" aria-controls="decay-choices" value="1">
+                  <span aria-hidden="true">×</span>
+                  <button type="button" tabindex="-1" aria-label="展开 D 时值选项"></button>
+                  <div id="decay-choices" class="numeric-options" role="listbox" aria-label="D 时值选项" hidden></div>
+                </div>
+              </div>
+              <div class="numeric-field" title="缩短时截断，延长时循环">
+                <label for="beats">片段拍数</label>
+                <div class="numeric-choice">
+                  <input id="beats" type="text" inputmode="numeric" role="combobox" aria-autocomplete="none" aria-expanded="false" aria-controls="beats-choices" value="4">
+                  <span aria-hidden="true">拍</span>
+                  <button type="button" tabindex="-1" aria-label="展开片段拍数选项"></button>
+                  <div id="beats-choices" class="numeric-options" role="listbox" aria-label="片段拍数选项" hidden></div>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <section class="ingredient chord-ingredient" aria-labelledby="chord-title">
+            <div class="ingredient-label"><h3 id="chord-title">和声</h3></div>
+            <div class="chord-display"><strong id="chord-name"></strong><div id="chord-notes" class="chord-notes" aria-label="和弦构成音"></div></div>
+            <div class="plot-surface staff-surface"><canvas id="chord-staff" role="img" aria-label="和弦五线谱"></canvas></div>
+            <div class="field-grid chord-fields">
+              <label>根音<select id="root"></select></label>
+              <label>和弦质<select id="quality"></select></label>
+              <label>八度<select id="octave"></select></label>
+            </div>
+          </section>
+        </div>
+
+        <section id="result" class="result" aria-labelledby="result-title">
+          <div class="result-label"><h3 id="result-title">音词事件实例</h3><span id="result-description" class="numeric"></span></div>
+          <button type="button" id="result-surface" class="plot-surface audible" draggable="true" aria-label="试听音词事件实例，也可拖到片段编曲">
+            <canvas id="result-roll" aria-hidden="true"></canvas>
+            <span id="result-playhead" class="roll-playhead" aria-hidden="true" hidden></span>
+          </button>
+        </section>
+      </section>
+
+      <section class="sequence" aria-labelledby="sequence-title" data-musicword-preview>
+        <div class="section-heading sequence-heading">
+          <div class="heading-group"><h2 id="sequence-title">片段编曲</h2><span id="sequence-count" class="tag numeric"></span></div>
+          <div class="transport" role="group" aria-label="编曲播放控制">
+            <button id="play-sequence" class="primary" type="button"><i class="icon play" aria-hidden="true"></i>播放</button>
+            <button id="stop" type="button"><i class="icon stop" aria-hidden="true"></i>停止</button>
+          </div>
+          <button id="export" type="button">导出 MIDI</button>
+        </div>
+        <div class="preset-controls">
+          <div class="sequence-actions">
+            <select id="preset" aria-label="预置和弦进行"></select>
+            <button id="insert-preset" type="button">置入和弦进行</button>
+            <button id="randomize" type="button">随机段落</button>
+          </div>
+        </div>
+        <details class="preset-editor">
+          <summary>编辑和弦进行</summary>
+          <table aria-label="和弦进行步骤">
+            <thead>
+              <tr><th scope="col">步骤</th><th scope="col">根音</th><th scope="col">和弦质</th><th scope="col">八度</th><th scope="col">拍数</th></tr>
+            </thead>
+            <tbody id="preset-steps"></tbody>
+          </table>
+          <button id="reset-preset" type="button">恢复该组默认值</button>
+        </details>
+        <div id="timeline-scroll" class="timeline-scroll" aria-label="片段编曲时间轴" tabindex="0">
+          <div id="timeline" class="timeline">
+            <div id="ruler" class="ruler" title="点击从此拍播放"></div>
+            <div id="clips" class="clips" role="group" aria-label="队列片段"></div>
+            <p id="empty-track" class="empty-track">将音词事件实例拖到任意拍，或置入一组和弦进行</p>
+            <div id="insert-marker" class="insert-marker" hidden><span></span></div>
+            <div id="playhead" class="playhead" aria-hidden="true" hidden><span></span></div>
+          </div>
+        </div>
+        <div class="sequence-footer">
+          <span id="status" role="status" aria-live="polite">拖动片段两端可调整拍数</span>
+        </div>
+      </section>
+    </div>
+  </main>
+  <noscript>请启用 JavaScript 后使用 LEGO。</noscript>
+</body>
+</html>

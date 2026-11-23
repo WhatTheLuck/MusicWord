@@ -1,0 +1,26 @@
+{
+  "name": "bpe-music-word-lab",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "concurrently -k \"node server.mjs\" \"vite\"",
+    "build": "vite build",
+    "start": "node server.mjs --production",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@phosphor-icons/react": "latest",
+    "@tonejs/midi": "latest",
+    "cors": "latest",
+    "express": "latest",
+    "tone": "latest"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-react": "latest",
+    "concurrently": "latest",
+    "vite": "latest",
+    "vitest": "latest",
+    "typescript": "latest"
+  }
+}

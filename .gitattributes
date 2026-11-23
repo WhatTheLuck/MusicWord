@@ -1,0 +1,13 @@
+* text=auto
+*.mid -text
+*.midi -text
+*.pkl -text
+*.pickle -text
+*.npz -text
+*.npy -text
+*.pdf -text
+*.png -text
+*.jpg -text
+*.ttf -text
+*.woff2 -text
+*.xlsx -text

@@ -1,0 +1,19 @@
+{
+  "schemaVersion": 1,
+  "savedAt": "2026-09-10T12:20:51.175Z",
+  "parameters": {
+    "tpb": 24,
+    "saturation": 8,
+    "metric": "cosine",
+    "threshold": 0.94,
+    "weights": {
+      "pitch": 1,
+      "velocity": 0.7,
+      "duration": 0.85,
+      "prevDelta": 0.65,
+      "nextDelta": 0.65,
+      "prevPitchDelta": 0.8,
+      "nextPitchDelta": 0.8
+    }
+  }
+}

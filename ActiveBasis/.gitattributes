@@ -1,0 +1,8 @@
+# Preserve published data bytes so SHA-256 values survive every checkout.
+POP909-Dataset/** -text
+"labeled data/**" -text
+web/public/annotations/** -text
+web/public/music-preview/** -text
+results/simple_sparse_code/1/** -text
+results/simple_sparse_code/2/** -text
+data-manifest.sha256 text eol=lf
