@@ -476,6 +476,7 @@ export function mountAnnotationControls(container, { toolbar, onLoad, onChange, 
   layers.addEventListener('change', notify);
   load.addEventListener('click', refresh);
   return {
+    refresh,
     setTrackLayers(track) {
       const options = current && track ? referenceLayers(current, [track]) : new Map();
       return setLayers(options, layers.value);
