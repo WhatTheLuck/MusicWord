@@ -4,6 +4,8 @@
 
 在 GitHub 点击 **Code → Download ZIP** 下载并解压完整项目，或使用 `git clone https://github.com/WhatTheLuck/MusicWord.git`。作业说明见 [音乐单词实验作业要求](output/pdf/音乐单词实验作业要求.pdf)，其排版源文件和操作截图保存在 `docs/assignment/`。
 
+百度网盘下载：[MusicWord 压缩包](https://pan.baidu.com/s/1OI4-crItGPBWdySdjZhI8Q?pwd=wfgv)，提取码：**wfgv**。
+
 Windows、macOS 和 Linux 使用同一套启动步骤。先安装 **Node.js 22.12 或更新版本**和 **Python 3.11**。如果 Linux 发行版将虚拟环境支持单独打包，还需要安装 Python 3.11 对应的 venv 包。
 
 在包含 `package.json` 的 MusicWord 根目录打开终端，运行：

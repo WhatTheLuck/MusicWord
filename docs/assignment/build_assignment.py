@@ -123,6 +123,7 @@ styles['body'].fontSize=12
 styles['body'].leading=20
 start('音乐单词实验作业要求',main=True)
 p('项目仓库：<link href="https://github.com/WhatTheLuck/MusicWord" color="#222222">https://github.com/WhatTheLuck/MusicWord</link>','small',gap=2)
+p('百度网盘：<link href="https://pan.baidu.com/s/1OI4-crItGPBWdySdjZhI8Q?pwd=wfgv" color="#222222">https://pan.baidu.com/s/1OI4-crItGPBWdySdjZhI8Q?pwd=wfgv</link>　提取码：<b>wfgv</b>','small',gap=2)
 section('一、实验任务')
 step(1,'<b>选曲：</b>选择 <b>3 首乐曲</b>，可使用曲库或自选 MIDI / MusicXML 文件。')
 step(2,'<b>标注：</b>分别标注这 3 首乐曲，划分音乐单词，并为相同或相似片段指定词类。')
@@ -147,7 +148,7 @@ styles['body'].leading=18
 start('附录一　安装、启动与保存')
 section('启动工作台')
 step(1,'安装 <b>Node.js 22.12 或更新版本</b>和 <b>Python 3.11</b>。安装时加入系统路径，随后重新打开终端。')
-step(2,'从首页的 GitHub 仓库选择 <b>Code / Download ZIP</b>，解压并保留完整文件夹。Windows 可双击根目录的 start.cmd；也可在包含 package.json 的项目根目录打开终端，运行：')
+step(2,'从首页的百度网盘链接下载压缩包（提取码 <b>wfgv</b>），或从 GitHub 仓库选择 <b>Code / Download ZIP</b>。解压并保留完整文件夹。Windows 可双击根目录的 start.cmd；也可在包含 package.json 的项目根目录打开终端，运行：')
 commands(['npm start'])
 step(3,'首次启动会安装依赖，每次启动会构建页面。等终端显示地址后，在浏览器打开 <b>http://127.0.0.1:8770/</b>。保持终端开启，结束时按 Ctrl+C。')
 shot('setup-topbar.jpg','图 1　最顶部的本页 / 全部页面预设栏、文件按钮与保存按钮。')
