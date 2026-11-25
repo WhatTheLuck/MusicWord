@@ -202,7 +202,7 @@ export function buildHierarchyModel(history, trackId) {
   const keyFor = (word) => `${word.notes.length - 1}:${word.sourceIndex}:${word.id}`;
   const addNode = (word, round, rank) => {
     const key = keyFor(word);
-    nodes.set(key, { key, word, level: word.notes.length - 1, round, rank });
+    nodes.set(key, { key, word, level: word.notes.length - 1, round, rank, parentRound: null });
     return key;
   };
 
@@ -223,7 +223,10 @@ export function buildHierarchyModel(history, trackId) {
         .map((child) => nodes.get(keyFor(child)));
       const rank = Math.max(0, ...children.map((child) => child.rank)) + 1;
       const parentKey = addNode(parent, state.round, rank);
-      children.forEach((child) => edges.push({ parentKey, childKey: child.key }));
+      children.forEach((child) => {
+        child.parentRound = state.round;
+        edges.push({ parentKey, childKey: child.key });
+      });
     });
   }
 
@@ -236,12 +239,16 @@ export function buildHierarchyModel(history, trackId) {
   };
 }
 
-export function buildBpeLayerView(hierarchies, visibleLevels) {
+export function isBpeRootAt({ round, parentRound }, atRound = Infinity) {
+  return round <= atRound && (parentRound === null || atRound < parentRound);
+}
+
+export function buildBpeLayerView(hierarchies, visibleLevels, topWordsOnly = false) {
   const levels = new Set(visibleLevels);
   const tracks = new Map();
   const entries = new Map();
   for (const [trackId, model] of hierarchies) {
-    const nodes = model.nodes.filter(({ level }) => levels.has(level))
+    const nodes = model.nodes.filter((node) => topWordsOnly ? isBpeRootAt(node) : levels.has(node.level))
       .sort((a, b) => b.level - a.level || a.word.sourceIndex - b.word.sourceIndex)
       .map((node) => ({ ...node, trackId, instanceKey: `${trackId}:${node.key}` }));
     const keys = new Set(nodes.map(({ key }) => key));

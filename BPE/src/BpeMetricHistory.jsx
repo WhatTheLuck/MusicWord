@@ -1,34 +1,32 @@
 import { useEffect, useMemo, useState } from 'react';
+import { isBpeRootAt } from './bpe';
 
 const colors = ['#b3a0ff', '#ffd18a', '#66e2c6', '#fa9dc7', '#8abfff', '#d2e68c', '#ff9b81', '#edf0ff'];
 const decimals = new Intl.NumberFormat('zh-CN', { minimumFractionDigits: 3, maximumFractionDigits: 3 });
 
-// Reuse a score until another round creates more instances at the same level.
 function roundsToCompare(history, hierarchies, scope) {
-  const levelsByRound = history.map(() => new Set());
+  if (scope === 'top') return history.map(({ round }) => ({ round, origin: round }));
+  // For a fixed level, only rounds creating new instances change the comparison.
+  const level = Number(scope);
+  const roundsWithNewNodes = new Set();
   for (const { nodes } of hierarchies.values()) {
-    for (const { round, level } of nodes) levelsByRound[round].add(level);
+    for (const node of nodes) if (node.level === level) roundsWithNewNodes.add(node.round);
   }
-  const latestByLevel = new Map();
-  let top = 0;
+  let origin;
   return history.flatMap(({ round }) => {
-    for (const level of levelsByRound[round]) {
-      top = Math.max(top, level);
-      latestByLevel.set(level, round);
-    }
-    const level = scope === 'top' ? top : Number(scope);
-    const origin = latestByLevel.get(level);
-    return origin === undefined ? [] : [{ round, origin, level }];
+    if (roundsWithNewNodes.has(round)) origin = round;
+    return origin === undefined ? [] : [{ round, origin }];
   });
 }
 
-function comparisonAt(origin, level, hierarchies, tracks, reference, shared) {
+function comparisonAt(origin, scope, hierarchies, tracks, reference, shared) {
   const totals = { matches: 0, manual: 0, predicted: 0, covered: 0 };
   const comparisons = [];
   for (const track of tracks) {
     const manual = reference.get(track.id)?.manual;
     if (!manual?.length) continue;
-    const predictions = hierarchies.get(track.id).nodes.filter((node) => node.round <= origin && node.level === level)
+    const predictions = hierarchies.get(track.id).nodes.filter((node) => scope === 'top'
+      ? isBpeRootAt(node, origin) : node.round <= origin && node.level === Number(scope))
       .map(({ word }) => ({
         categoryId: word.id,
         noteIds: word.notes.map(({ id }) => id),
@@ -51,6 +49,7 @@ export default function BpeMetricHistory({ history, hierarchies, tracks, referen
   const fallback = visibleLevels.length === 1 ? String(visibleLevels[0]) : 'top';
   const chosenIsVisible = chosenScope === 'top' || visibleLevels.some((level) => String(level) === chosenScope);
   const scope = topWordsOnly ? 'top' : chosenIsVisible ? chosenScope : fallback;
+  const scopeLabel = scope === 'top' ? '顶层词' : `L${scope}`;
 
   useEffect(() => {
     setPoints([]);
@@ -66,14 +65,14 @@ export default function BpeMetricHistory({ history, hierarchies, tracks, referen
       return;
     }
     const controller = new AbortController();
-    const cached = ({ origin, level }) => scores.get(history[origin])?.get(level);
-    const pending = new Map(rounds.filter((point) => !cached(point)).map((point) => [`${point.origin}:${point.level}`, point]));
+    const cached = ({ origin }) => scores.get(history[origin])?.get(scope);
+    const pending = new Set(rounds.filter((point) => !cached(point)).map(({ origin }) => origin));
     const show = () => {
       setPoints(rounds.flatMap((point) => cached(point) ? [{ ...point, ...cached(point) }] : []));
       const latest = rounds.at(-1);
       const score = cached(latest);
       if (score) {
-        evaluation.setScore(shared.formatScores(score.totals, `第 ${latest.round} 轮 · L${latest.level}`));
+        evaluation.setScore(shared.formatScores(score.totals, `第 ${latest.round} 轮 · ${scopeLabel}`));
         evaluation.setMetrics(score.values);
       }
     };
@@ -89,21 +88,21 @@ export default function BpeMetricHistory({ history, hierarchies, tracks, referen
         if (!batch.length || controller.signal.aborted) return;
         const values = await shared.annotationMetricSeries(batch.map(({ comparisons }) => comparisons), controller.signal);
         if (controller.signal.aborted) return;
-        batch.forEach(({ origin, level, totals }, index) => {
+        batch.forEach(({ origin, totals }, index) => {
           const state = history[origin];
           if (!scores.has(state)) scores.set(state, new Map());
-          scores.get(state).set(level, { totals, values: { ...values[index], ...shared.fragmentMetrics(totals) } });
+          scores.get(state).set(scope, { totals, values: { ...values[index], ...shared.fragmentMetrics(totals) } });
         });
         batch = [];
         size = 0;
         show();
       };
-      for (const point of pending.values()) {
+      for (const origin of pending) {
         if (controller.signal.aborted) return;
-        const result = comparisonAt(point.origin, point.level, hierarchies, tracks, referenceByTrack, shared);
+        const result = comparisonAt(origin, scope, hierarchies, tracks, referenceByTrack, shared);
         const length = JSON.stringify(result.comparisons).length;
         if (batch.length && (batch.length === 8 || size + length > 4_000_000)) await flush();
-        batch.push({ ...point, ...result });
+        batch.push({ origin, ...result });
         size += length;
       }
       await flush();
@@ -113,7 +112,7 @@ export default function BpeMetricHistory({ history, hierarchies, tracks, referen
       if (!controller.signal.aborted) { setMessage(failure.message); evaluation.setScore(failure.message); }
     });
     return () => controller.abort();
-  }, [history, hierarchies, tracks, referenceByTrack, reference, sourceMatches, shared, evaluation, loading, error, scope, scores]);
+  }, [history, hierarchies, tracks, referenceByTrack, reference, sourceMatches, shared, evaluation, loading, error, scope, scopeLabel, scores]);
 
   if (!reference || !shared) return null;
   const selected = points.find(({ round }) => round === selectedRound) ?? points.at(-1);
@@ -130,7 +129,7 @@ export default function BpeMetricHistory({ history, hierarchies, tracks, referen
         setSelectedRound(null);
         setChosenScope(event.target.value);
       }}>
-        <option value="top">每轮顶层</option>
+        <option value="top">每轮顶层（无父节点）</option>
         {visibleLevels.map((level) => <option key={level} value={level}>L{level}</option>)}
       </select></label>
     </div>
@@ -150,7 +149,7 @@ export default function BpeMetricHistory({ history, hierarchies, tracks, referen
         </g>)}
       </svg>
       <label className="bpe-metric-round">
-        <output>第 {selected.round} 轮 · L{selected.level} · 精确匹配 {selected.totals.matches}/{selected.totals.manual}</output>
+        <output>第 {selected.round} 轮 · {scopeLabel} · 精确匹配 {selected.totals.matches}/{selected.totals.manual}</output>
         <input type="range" aria-label="查看指标轮次" min={firstRound} max={lastRound} value={selected.round} disabled={firstRound === lastRound}
           onChange={(event) => setSelectedRound(Number(event.target.value))} />
       </label>

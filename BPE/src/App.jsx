@@ -230,7 +230,7 @@ function LevelSelector({ levels, selected, onToggle, disabled = false }) {
 }
 
 function TopLayerToggle({ checked, onChange }) {
-  return <label className="top-layer-toggle">
+  return <label className="top-layer-toggle" title="显示当前没有父节点的全部词，包括未合并的单音符">
     <input type="checkbox" role="switch" aria-label="仅显示顶层词" checked={checked} onChange={(event) => onChange(event.target.checked)} />
     <span aria-hidden="true"><i /></span>
     <small>仅顶层词</small>
@@ -1092,9 +1092,8 @@ export default function App() {
   const hierarchies = useMemo(() => new Map(mode === 'algorithm' && history.length
     ? preparedTracks.map(({ id }) => [id, buildHierarchyModel(history, id)]) : []), [mode, preparedTracks, history]);
   const availableLevels = useMemo(() => [...new Set([...hierarchies.values()].flatMap(({ nodes }) => nodes.map(({ level }) => level)))].sort((a, b) => a - b), [hierarchies]);
-  const visibleLevels = useMemo(() => topWordsOnly ? availableLevels.slice(-1) : availableLevels.filter((level) => !hiddenLevels.includes(level)),
-    [availableLevels, hiddenLevels, topWordsOnly]);
-  const layerView = useMemo(() => buildBpeLayerView(hierarchies, visibleLevels), [hierarchies, visibleLevels]);
+  const visibleLevels = useMemo(() => availableLevels.filter((level) => !hiddenLevels.includes(level)), [availableLevels, hiddenLevels]);
+  const layerView = useMemo(() => buildBpeLayerView(hierarchies, visibleLevels, topWordsOnly), [hierarchies, visibleLevels, topWordsOnly]);
   const toggleLevel = useCallback((level) => setHiddenLevels((old) => old.includes(level) ? old.filter((item) => item !== level) : [...old, level]), []);
   const currentParameters = useMemo(() => ({ tpb, saturation, metric, threshold, weights }), [tpb, saturation, metric, threshold, weights]);
   useLayoutEffect(() => {

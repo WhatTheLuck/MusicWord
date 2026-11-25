@@ -249,6 +249,11 @@ def html_document(payload=None):
 
 
 class Handler(BaseHTTPRequestHandler):
+    def log_request(self, code="-", size="-"):
+        # The Windows console can pause writes while text is selected.
+        # Serving a local request must not wait for the access log.
+        pass
+
     def send_bytes(self, data, content_type, status=200):
         self.send_response(status)
         self.send_header("Content-Type", content_type)

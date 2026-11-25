@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { sequenceSimilarity, initialState, bpeStep, buildBpeHistory, buildBpeLayerView, buildHierarchyModel, makeEvents, normalizeTracks } from './bpe';
+import { sequenceSimilarity, initialState, bpeStep, buildBpeHistory, buildBpeLayerView, buildHierarchyModel, isBpeRootAt, makeEvents, normalizeTracks } from './bpe';
 
 const weights = { pitch: 1, velocity: 1, duration: 1, prevDelta: 1, nextDelta: 1, prevPitchDelta: 1, nextPitchDelta: 1 };
 const event = (pitch) => ({
@@ -87,5 +87,23 @@ describe('music BPE', () => {
     expect(view.tracks.get('t').nodes.every(({ level }) => [1, 3].includes(level))).toBe(true);
     expect(view.entries.map(({ level, count }) => [level, count])).toEqual([[3, 2], [1, 4]]);
     expect(view.tracks.get('t').edges).toHaveLength(4);
+  });
+  it('shows parentless words from every layer and compares roots as of each round', () => {
+    const tracks = [
+      { id: 'long', events: [60, 62, 60, 62, 60, 62, 60, 62, 80].map(event) },
+      { id: 'short', events: [60, 62].map(event) },
+    ];
+    const history = buildBpeHistory(tracks, 2, weights, 'euclidean', .99);
+    const hierarchies = new Map(tracks.map(({ id }) => [id, buildHierarchyModel(history, id)]));
+    const levelsAt = (track, round) => hierarchies.get(track).nodes.filter((node) => isBpeRootAt(node, round))
+      .map(({ level }) => level).sort();
+    expect(levelsAt('long', 0)).toEqual(Array(9).fill(0));
+    expect(levelsAt('long', 1)).toEqual([0, 1, 1, 1, 1]);
+    expect(levelsAt('long', 2)).toEqual([0, 3, 3]);
+    expect(levelsAt('short', 2)).toEqual([1]);
+    const view = buildBpeLayerView(hierarchies, [3], true);
+    expect(view.entries.map(({ level, count }) => [level, count]).sort()).toEqual([[0, 1], [1, 1], [3, 2]]);
+    expect(view.tracks.get('long').edges).toEqual([]);
+    expect(view.tracks.get('short').edges).toEqual([]);
   });
 });
