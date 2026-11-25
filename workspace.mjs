@@ -5,6 +5,7 @@ import { createServer, request } from 'node:http';
 import { join } from 'node:path';
 import { createInterface } from 'node:readline';
 import { fileURLToPath } from 'node:url';
+import { stripVTControlCharacters } from 'node:util';
 import { serveSharedAnnotations } from './shared-annotation-store.mjs';
 import { serveParameterPresets } from './parameter-preset-store.mjs';
 
@@ -38,7 +39,7 @@ function startService(name, directory, command, args, env = process.env) {
     const timeout = setTimeout(() => reject(new Error(name + ' 启动超时。')), 30000);
     createInterface({ input: child.stdout }).on('line', (line) => {
       console.log('[' + name + '] ' + line);
-      const address = line.match(/http:\/\/127\.0\.0\.1:(\d+)/);
+      const address = stripVTControlCharacters(line).match(/http:\/\/127\.0\.0\.1:(\d+)/);
       if (!ready && address) {
         ready = true;
         clearTimeout(timeout);
