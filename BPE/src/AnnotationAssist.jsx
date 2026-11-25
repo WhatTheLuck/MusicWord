@@ -1,49 +1,64 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { ArrowCounterClockwise, Check, MagnifyingGlass, Play, Trash, X } from '@phosphor-icons/react';
+import { ArrowCounterClockwise, Check, Play, Trash, X } from '@phosphor-icons/react';
 import { DEFAULT_MATCH_PARAMETERS, normalizeMatchParameters } from './annotation-match';
 
 export function AnnotationSimilarity({ template, sourceTracks, annotationTracks, categories, tpb, onAccept, onClose, onPlay, playing, Preview, parameters, setParameters, scope, setScope }) {
   const [result, setResult] = useState(null);
   const [checked, setChecked] = useState(new Set());
-  const [busy, setBusy] = useState(false);
+  const [busy, setBusy] = useState(true);
   const [error, setError] = useState('');
-  const worker = useRef(null);
   const panel = useRef(null);
+  const form = useRef(null);
   const category = categories.find((item) => item.id === template.categoryId);
   const color = category?.color;
   useEffect(() => {
-    worker.current?.terminate(); worker.current = null;
-    setResult(null); setChecked(new Set()); setBusy(false); setError('');
-    return () => { worker.current?.terminate(); worker.current = null; };
-  }, [template, sourceTracks, annotationTracks, parameters, scope]);
-  useEffect(() => { panel.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' }); }, [template]);
-  const invalidate = () => {
-    worker.current?.terminate(); worker.current = null;
-    setBusy(false); setResult(null); setChecked(new Set()); setError('');
-  };
-  const change = (key, value) => { invalidate(); setParameters((old) => ({ ...old, [key]: value })); };
-  const cancel = () => { invalidate(); setError('已取消查找，可调整参数后重试。'); };
-  const search = () => {
-    invalidate();
+    setResult(null);
+    setChecked(new Set());
+    setError('');
+    if (!form.current.checkValidity()) {
+      setBusy(false);
+      setError('请检查查找参数的取值。');
+      return;
+    }
     setBusy(true);
-    try {
-      const job = new Worker(new URL('./annotation-match.worker.js', import.meta.url), { type: 'module' });
-      worker.current = job;
-      job.onmessage = ({ data }) => {
-        if (worker.current !== job) return;
-        job.terminate(); worker.current = null; setBusy(false);
-        if (data.error) { setError(data.error); return; }
-        setResult(data); setChecked(new Set(data.candidates.map((item) => item.id)));
-      };
-      job.onerror = () => {
-        if (worker.current !== job) return;
-        job.terminate(); worker.current = null; setBusy(false); setError('查找失败，请重试或缩小查找范围。');
-      };
-      job.postMessage({ template, annotationTracks, level: template.level, parameters: normalizeMatchParameters(parameters), tpb,
-        sourceTracks: scope === 'track' ? sourceTracks.filter((track) => track.id === template.trackId) : sourceTracks,
-      });
-    } catch (err) { setBusy(false); setError(err.message || '无法开始查找，请重试'); }
-  };
+    let job;
+    let active = true;
+    const finish = () => {
+      active = false;
+      job?.terminate();
+      setBusy(false);
+    };
+    const timer = setTimeout(() => {
+      try {
+        job = new Worker(new URL('./annotation-match.worker.js', import.meta.url), { type: 'module' });
+        job.onmessage = ({ data }) => {
+          if (!active) return;
+          finish();
+          if (data.error) { setError(data.error); return; }
+          setResult(data);
+          setChecked(new Set(data.candidates.map((item) => item.id)));
+        };
+        job.onerror = () => {
+          if (!active) return;
+          finish();
+          setError('查找失败，请调整参数或缩小查找范围。');
+        };
+        job.postMessage({ template, annotationTracks, level: template.level, parameters: normalizeMatchParameters(parameters), tpb,
+          sourceTracks: scope === 'track' ? sourceTracks.filter((track) => track.id === template.trackId) : sourceTracks,
+        });
+      } catch (err) {
+        finish();
+        setError(err.message || '无法开始查找');
+      }
+    }, 100);
+    return () => {
+      active = false;
+      clearTimeout(timer);
+      job?.terminate();
+    };
+  }, [template, sourceTracks, annotationTracks, parameters, scope, tpb]);
+  useEffect(() => { panel.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' }); }, [template]);
+  const change = (key, value) => setParameters((old) => ({ ...old, [key]: value }));
   const numeric = (key, label, min, max, step, suffix) => <label className="assist-field">
     <span>{label}{suffix && <small>{suffix}</small>}</span>
     <input type="number" min={min} max={max} step={step} value={parameters[key]} required
@@ -60,7 +75,7 @@ export function AnnotationSimilarity({ template, sourceTracks, annotationTracks,
       </button>
       <p>{sourceTracks.find((track) => track.id === template.trackId)?.name} · {template.notes.length} 音符 · 起始第 {(Math.min(...template.notes.map((note) => note.onset)) / tpb + 1).toFixed(2)} 拍。按音高、相对起音时间和时长匹配；片段外的声部不参与比较。</p>
     </div>
-    <form className="assist-form" onSubmit={(event) => { event.preventDefault(); search(); }}>
+    <form className="assist-form" ref={form} onSubmit={(event) => event.preventDefault()}>
       <div className="assist-parameters">
         {numeric('threshold', '最低相似度', 1, 100, 1, '%')}
         {numeric('onsetTolerance', '起音容差', 0, 2, 0.025, '拍')}
@@ -68,29 +83,30 @@ export function AnnotationSimilarity({ template, sourceTracks, annotationTracks,
         {numeric('transpose', '允许移调 ±', 0, 24, 1, '半音')}
         {numeric('tempoTolerance', '时长缩放 ±', 0, 50, 1, '%')}
         {numeric('maxResults', '最多预览', 1, 500, 1, '个')}
-        <label className="assist-field"><span>查找范围</span><select value={scope} onChange={(event) => { invalidate(); setScope(event.target.value); }}>
+        <label className="assist-field"><span>查找范围</span><select value={scope} onChange={(event) => setScope(event.target.value)}>
           <option value="track">模板所在音轨</option><option value="visible">当前勾选音轨</option>
         </select></label>
       </div>
       <div className="assist-toolbar">
         <label className="assist-check"><input type="checkbox" checked={parameters.skipAnnotated} onChange={(event) => change('skipAnnotated', event.target.checked)} />跳过当前层已标注音符</label>
         <span>0 表示严格匹配；相似度同时考虑缺失、多余音符和时间偏差。</span>
-        <button type="button" className="secondary-button" onClick={() => { invalidate(); setParameters(DEFAULT_MATCH_PARAMETERS); }}><ArrowCounterClockwise size={14} />重置参数</button>
-        {busy ? <button type="button" className="secondary-button" onClick={cancel}>取消查找</button>
-          : <button type="submit" className="primary-button"><MagnifyingGlass size={15} />{result ? '重新查找' : '开始查找'}</button>}
+        <button type="button" className="secondary-button" onClick={() => setParameters(DEFAULT_MATCH_PARAMETERS)}><ArrowCounterClockwise size={14} />重置参数</button>
       </div>
     </form>
     <div className="assist-status" role="status" aria-live="polite">
       {busy ? '正在查找相似片段…' : error || (result ? result.candidates.length
         ? `找到 ${result.total} 个片段${result.total > result.candidates.length ? `，预览相似度最高的 ${result.candidates.length} 个，可调大「最多预览」` : ''}。试听并勾选要接受的结果。`
-        : '未找到符合条件的片段。可降低最低相似度、增加容差或扩大查找范围。' : '调整参数后开始查找。预览不会写入标注。')}
+        : '未找到符合条件的片段。可降低最低相似度、增加容差或扩大查找范围。' : '')}
     </div>
     {Boolean(result?.candidates.length) && <>
       <div className="assist-toolbar assist-result-actions">
         <label className="assist-check"><input type="checkbox" aria-label="全选候选片段" checked={checked.size === result.candidates.length}
           onChange={(event) => setChecked(new Set(event.target.checked ? result.candidates.map((item) => item.id) : []))} />全选候选</label>
         <span>已选 {checked.size} / {result.candidates.length}</span>
-        <button className="primary-button" disabled={!checked.size} onClick={() => onAccept(result.candidates.filter((item) => checked.has(item.id)), template, normalizeMatchParameters(parameters))}>
+        <button className="primary-button" disabled={!checked.size} onClick={() => {
+          const message = onAccept(result.candidates.filter((item) => checked.has(item.id)), template, normalizeMatchParameters(parameters));
+          if (message) setError(message);
+        }}>
           <Check size={15} />接受 {checked.size} 个，标为 {template.categoryId}
         </button>
       </div>
@@ -113,7 +129,7 @@ export function AnnotationSimilarity({ template, sourceTracks, annotationTracks,
   </section>;
 }
 
-export function AnnotationResults({ level, sequences, categories, trackNames, onDelete, onReclassify, onEdit, onSearch, onPlay, playing, Preview }) {
+export function AnnotationResults({ level, sequences, categories, trackNames, onDelete, onReclassify, onLocate, location, onEdit, onSearch, onPlay, playing, Preview }) {
   const [filter, setFilter] = useState('all');
   const [categoryFilter, setCategoryFilter] = useState('all');
   const [checked, setChecked] = useState(new Set());
@@ -138,7 +154,8 @@ export function AnnotationResults({ level, sequences, categories, trackNames, on
     <div className="annotation-result-list">
       {!visible.length && <p className="assist-status">{rows.length ? '当前筛选下没有标注。' : '确认标注后，可在这里试听、修改范围、调整词类或删除。'}</p>}
       {visible.map((row) => {
-        const { word, trackId, key } = row;
+        const { word, trackId, segmentId, key } = row;
+        const located = location?.trackId === trackId && location.level === level && location.segmentId === segmentId;
         const playbackKey = `result:${key}`;
         return <div key={key} className="annotation-result-row" style={{ '--word-color': word.color }}>
           <label className="assist-check"><input type="checkbox" aria-label={`选择标注 ${trackNames[trackId]} ${word.id} ${rows.indexOf(row) + 1}`} checked={checked.has(key)} onChange={(event) => setChecked((old) => {
@@ -147,6 +164,7 @@ export function AnnotationResults({ level, sequences, categories, trackNames, on
           <button className="assist-preview" aria-label={`试听标注 ${rows.indexOf(row) + 1}`} onClick={() => onPlay(word, playbackKey)}><Play size={14} weight="fill" /><Preview word={word} active={playing?.key === playbackKey} progress={playing?.progress} /></button>
           <span>{trackNames[trackId]} · {word.notes.length} 音符<small>{word.assistance ? `辅助标注${word.assistance.edited ? ' · 已修改 · 原匹配' : ' · 匹配'} ${(word.assistance.score * 100).toFixed(1)}%` : '手工标注'}</small></span>
           <div className="assist-row-actions">
+            <button className="secondary-button" aria-current={located || undefined} onClick={() => onLocate({ trackId, segmentId, level, categoryId: word.id })}>定位</button>
             <button className="secondary-button" onClick={() => onSearch(word, trackId)}>查找相似</button>
             <button className="secondary-button" onClick={() => onEdit(row)}>编辑范围</button>
             <button className="secondary-button" aria-label={`删除标注 ${rows.indexOf(row) + 1}`} onClick={() => onDelete([row])}><Trash size={14} />删除</button>

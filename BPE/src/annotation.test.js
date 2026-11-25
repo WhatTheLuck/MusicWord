@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   aggregateAnnotationNodes, applyAnnotation, buildAnnotationExport, buildAnnotationHierarchy, buildAnnotationSelectionWord, buildAnnotationView,
-  createTrackAnnotation, layerCoverage,
+  createTrackAnnotation, editAnnotation, layerCoverage,
   insertAnnotationLayer, nextEmptyAnnotationCategory, reconcileAnnotationTracks, restoreAnnotationTracks,
 } from './annotation';
 
@@ -26,6 +26,26 @@ describe('manual annotation model', () => {
     expect(result.error).toBe('');
     expect(result.tracks[0].layers[1].segments.map((segment) => segment.noteIds)).toEqual([['n0', 'n1'], ['n1', 'n2']]);
     expect(layerCoverage(result.tracks[0], 1)).toMatchObject({ covered: 3, total: 4, complete: false });
+  });
+
+  it('overwrites an exact range in the same layer and repairs links to legacy duplicates', () => {
+    const first = applyAnnotation(createTrackAnnotation(track), 1, ['n0', 'n1'], ['note:n0', 'note:n1'], 'A');
+    const overlap = applyAnnotation(first.track, 1, ['n1', 'n2'], ['note:n1', 'note:n2'], 'B');
+    const legacy = { ...first.segment, id: 'old-duplicate', categoryId: 'B' };
+    const expanded = insertAnnotationLayer(overlap.track, 2, 'parents');
+    expanded.layers[1] = { ...expanded.layers[1], segments: [...expanded.layers[1].segments, legacy] };
+    const higher = applyAnnotation(expanded, 2, ['n0', 'n1', 'n2'], [first.segment.id, legacy.id, overlap.segment.id], 'D');
+
+    const result = aggregateAnnotationNodes([higher.track], track.id, 0, ['note:n1', 'note:n0'], 'C');
+    expect(result).toMatchObject({ replaced: true, segment: { id: first.segment.id, categoryId: 'C' } });
+    const directlyEdited = editAnnotation(higher.track, 1, legacy.id, { categoryId: 'C' });
+    for (const [updated, retainedId] of [[result.tracks[0], first.segment.id], [directlyEdited, legacy.id]]) {
+      expect(updated.layers[0]).toBe(higher.track.layers[0]);
+      expect(updated.layers[1].segments).toEqual([
+        expect.objectContaining({ id: retainedId, categoryId: 'C', noteIds: ['n0', 'n1'] }), overlap.segment,
+      ]);
+      expect(updated.layers[2].segments[0]).toMatchObject({ categoryId: 'D', sourceSegmentIds: [retainedId, overlap.segment.id] });
+    }
   });
 
   it('creates a word from a single selected note node', () => {

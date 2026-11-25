@@ -87,11 +87,21 @@ export function sourceSegmentsForLevel(trackAnnotation, level) {
   return trackAnnotation.layers[Math.max(0, level - 1)]?.segments ?? [];
 }
 
+const sameNotes = (segment, ids) => segment.noteIds.length === ids.size && segment.noteIds.every((id) => ids.has(id));
+
 export function applyAnnotation(trackAnnotation, level, noteIds, sourceSegmentIds, categoryId) {
   const layer = trackAnnotation.layers[level];
   const selectedNotes = new Set(noteIds);
   const orderedNoteIds = trackAnnotation.noteIds.filter((id) => selectedNotes.has(id));
   if (!layer || !categoryId || !orderedNoteIds.length) return { track: trackAnnotation, error: '请选择音符和单词类别' };
+
+  const exactNotes = new Set(orderedNoteIds);
+  const existing = layer.segments.find((segment) => !segment.automatic && sameNotes(segment, exactNotes));
+  if (existing) {
+    const track = editAnnotation(trackAnnotation, level, existing.id, { categoryId, sourceSegmentIds: [...new Set(sourceSegmentIds)] });
+    const segment = track.layers[level].segments.find((item) => item.id === existing.id);
+    return { track, segment, replaced: true, error: '' };
+  }
 
   const automaticTop = layer.role === 'top' ? layer.segments.filter((segment) => segment.automatic) : [];
   const remaining = layer.segments.filter((segment) => !automaticTop.includes(segment));
@@ -133,6 +143,7 @@ export function aggregateAnnotationNodes(tracks, trackId, level, sourceSegmentId
     parentLevel,
     insertedLayer,
     segment: result.segment,
+    replaced: Boolean(result.replaced),
     error: '',
   };
 }
@@ -147,19 +158,30 @@ export function removeAnnotation(trackAnnotation, level, segmentId) {
 }
 
 export function editAnnotation(track, level, segmentId, changes) {
-  const segment = track.layers[level]?.segments.find((item) => item.id === segmentId && !item.automatic);
+  const segments = track.layers[level]?.segments;
+  const segment = segments?.find((item) => item.id === segmentId && !item.automatic);
   if (!segment) return track;
-  const validIds = new Set(track.noteIds);
   const selected = new Set(changes.noteIds ?? segment.noteIds);
-  const noteIds = track.noteIds.filter((id) => selected.has(id) && validIds.has(id));
+  const noteIds = track.noteIds.filter((id) => selected.has(id));
   if (!noteIds.length) return track;
-  return { ...track, layers: track.layers.map((layer, index) => index !== level ? layer : {
-    ...layer, segments: layer.segments.map((item) => item.id !== segmentId ? item : {
-      ...item, ...changes, id: item.id, automatic: false, noteIds,
-      order: track.noteIds.indexOf(noteIds[0]),
-      ...(item.assistance ? { assistance: { ...item.assistance, edited: true } } : {}),
-    }).sort((a, b) => a.order - b.order),
-  }) };
+  const exactNotes = new Set(noteIds);
+  const duplicates = new Set(segments.filter((item) => item.id !== segmentId && !item.automatic && sameNotes(item, exactNotes))
+    .map((item) => item.id));
+  const edited = { ...segment, ...changes, id: segmentId, automatic: false, noteIds,
+    order: track.noteIds.indexOf(noteIds[0]),
+    ...(segment.assistance ? { assistance: { ...segment.assistance, edited: true } } : {}),
+  };
+  const layers = track.layers.map((layer, index) => {
+    if (index === level) return { ...layer, segments: segments.filter((item) => !duplicates.has(item.id))
+      .map((item) => item.id === segmentId ? edited : item).sort((a, b) => a.order - b.order) };
+    if (index !== level + 1 || !duplicates.size) return layer;
+    return { ...layer, segments: layer.segments.map((parent) => {
+      if (!parent.sourceSegmentIds?.some((id) => duplicates.has(id))) return parent;
+      const sourceSegmentIds = [...new Set(parent.sourceSegmentIds.map((id) => duplicates.has(id) ? segmentId : id))];
+      return { ...parent, sourceSegmentIds };
+    }) };
+  });
+  return { ...track, layers };
 }
 
 export function deleteAnnotationSegments(tracks, level, targets) {
@@ -187,7 +209,7 @@ export function acceptAnnotationMatches(tracks, level, candidates, categoryId, t
       const ids = new Set(candidate.noteIds);
       if (!ids.size || [...ids].some((id) => !valid.has(id))) continue;
       const existing = result.layers[level].segments;
-      if (existing.some((segment) => segment.noteIds.length === ids.size && segment.noteIds.every((id) => ids.has(id)))) continue;
+      if (existing.some((segment) => sameNotes(segment, ids))) continue;
       if (parameters.skipAnnotated !== false && existing.some((segment) => !segment.automatic && segment.noteIds.some((id) => ids.has(id)))) continue;
       // Link whole lower-layer nodes only; do not claim a partially matched child.
       const children = result.layers[level - 1].segments.filter((segment) => segment.noteIds.every((id) => ids.has(id)));

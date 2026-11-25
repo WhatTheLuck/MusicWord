@@ -223,12 +223,13 @@ button:disabled { opacity: .4; cursor: not-allowed; }
 .source-word.selected { fill: var(--accent); fill-opacity: .12; stroke: #fff0c7; stroke-width: 1.8; stroke-dasharray: none; }
 .manual-word { pointer-events: none; }
 .manual-word rect { fill: currentColor; fill-opacity: .12; stroke: currentColor; stroke-width: 2; vector-effect: non-scaling-stroke; }
-.manual-word.selected rect { fill-opacity: .28; stroke: #fff0c7; stroke-width: 2.5; }
+.manual-word:is(.selected, .focused) rect { fill-opacity: .28; stroke: #fff0c7; stroke-width: 2.5; }
 .manual-word text { fill: var(--mw-chart-ink, #f4f0e3); font: 700 8px 'IBM Plex Mono', monospace; paint-order: stroke; stroke: var(--mw-chart, #151512); stroke-width: 2px; }
 .manual-word.automatic { opacity: .55; }
 .selection-marquee { fill: var(--accent); fill-opacity: .12; stroke: #fff0c7; stroke-width: 1.5; stroke-dasharray: 6 3; vector-effect: non-scaling-stroke; pointer-events: none; }
 .annotation-roll-heading > div { display: flex; align-items: baseline; gap: 12px; }
 .annotation-roll-heading > .annotation-roll-tools { align-items: center; flex-wrap: wrap; }
+.annotation-roll-panel { scroll-margin-top: var(--app-header-height); }
 .annotation-legend { display: inline-flex; align-items: center; gap: 6px; color: var(--muted); font-size: 9px; }
 .annotation-legend i { width: 18px; height: 9px; display: inline-block; }
 .legend-current { border: 2px solid var(--accent); background: var(--accent-dark); }
@@ -276,8 +277,8 @@ button:disabled { opacity: .4; cursor: not-allowed; }
 .tree-heading small { font: 500 8px 'IBM Plex Mono', monospace; letter-spacing: .06em; }
 .annotation-tree-heading { padding-block: 6px; }
 .annotation-tree-heading > span { flex-shrink: 0; }
-.annotation-tree-actions { display: flex; align-items: center; gap: 12px; }
-.annotation-tree-actions .primary-button { min-height: 32px; padding-inline: 10px; }
+.annotation-tree-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; align-items: center; gap: 6px 12px; }
+.annotation-tree-actions :is(.primary-button, .secondary-button) { min-height: 32px; padding-inline: 10px; }
 .word-tree { display: block; background: var(--mw-chart, #131311); border-bottom: 1px solid var(--line); }
 .word-tree.selectable { cursor: crosshair; touch-action: none; user-select: none; }
 .tree-background { fill: var(--mw-chart, #131311); }
@@ -290,7 +291,7 @@ button:disabled { opacity: .4; cursor: not-allowed; }
 .tree-node-label { fill: var(--mw-chart-ink, #f1efe5); font: 600 6px 'IBM Plex Mono', monospace; paint-order: stroke; stroke: var(--roll-bg); stroke-width: 2px; pointer-events: none; }
 .tree-node:hover .tree-node-shell { fill: currentColor; fill-opacity: .18; stroke-width: 2; }
 .tree-node.active .tree-node-shell, .tree-node.selected .tree-node-shell { fill: currentColor; fill-opacity: .22; stroke-width: 2; }
-.word-tree.selectable .tree-node.selected .tree-node-shell { stroke: var(--mw-chart-ink, #fff6dc); stroke-width: 2.5; }
+.word-tree.selectable .tree-node:is(.selected, .focused) .tree-node-shell { stroke: var(--mw-chart-ink, #fff6dc); stroke-width: 2.5; }
 .tree-node.focused .tree-node-shell { filter: drop-shadow(0 2px 4px rgba(0,0,0,.75)); stroke-width: 2.5; }
 .tree-node:focus { outline: none; }
 .tree-node:focus .tree-node-shell { stroke: var(--mw-chart-ink, #fff6dc); stroke-width: 2.5; }
@@ -350,6 +351,7 @@ button:disabled { opacity: .4; cursor: not-allowed; }
 .assist-score { text-align: right; font-weight: 650; }
 .assist-row-actions { display: flex; flex-wrap: wrap; gap: 6px; }
 .assist-row-actions .secondary-button { min-height: 32px; padding-inline: 9px; }
+.assist-row-actions [aria-current="true"] { border-color: var(--accent); }
 @media (max-width: 700px) {
   .assist-template { align-items: stretch; flex-direction: column; gap: 10px; }
   .assist-template > button { flex-basis: auto; }

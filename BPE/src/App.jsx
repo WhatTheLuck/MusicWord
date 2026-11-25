@@ -244,7 +244,7 @@ function SelectionPlaybackToggle({ checked, onChange }) {
   </label>;
 }
 
-function HierarchyTree({ track, history = [], words, width, endTick, onPlay, playing, selectedWordId, focusedInstanceKey, providedModel = null, selectedNodes, onSelectNodes, onAggregate, canAggregate }) {
+function HierarchyTree({ track, history = [], words, width, endTick, onPlay, playing, selectedWordId, focusedInstanceKey, providedModel = null, selectedNodes, onSelectNodes, onAggregate, canAggregate, onDelete }) {
   const selectable = Boolean(onSelectNodes);
   const gesture = useRef(null);
   const [marquee, setMarquee] = useState(null);
@@ -298,6 +298,7 @@ function HierarchyTree({ track, history = [], words, width, endTick, onPlay, pla
       {selectable ? <div className="annotation-tree-actions">
         <small>点选或框选同层节点</small>
         <button type="button" className="primary-button" onClick={onAggregate} disabled={!canAggregate}><Check size={15} weight="bold" />聚合</button>
+        <button type="button" className="secondary-button" onClick={onDelete} disabled={!onDelete}><Trash size={15} />删除所选标注</button>
       </div> : <small>{model.nodes.length} NODES · 点击节点试听</small>}
     </div>
     <svg className={`word-tree ${selectable ? 'selectable' : ''}`} width={width} height={treeHeight} role="group" aria-label={`${track.name} 音乐词层级树`}
@@ -527,7 +528,8 @@ function PianoRoll({ track, sequence, history, tpb, onPlay, playing, selectedWor
   </section>;
 }
 
-function AnnotationPianoRoll({ track, annotation, level, categories, selection, onSelectNodes, onSelectNotes, onAggregate, canAggregate, onMessage, onPlay, playing, selectedWordId, tpb }) {
+function AnnotationPianoRoll({ track, annotation, level, categories, selection, location, onSelectNodes, onSelectNotes, onAggregate, canAggregate, onDelete, onMessage, onPlay, playing, selectedWordId, tpb }) {
+  const panelRef = useRef(null);
   const svgRef = useRef(null);
   const scrollRef = useRef(null);
   const [drag, setDrag] = useState(null);
@@ -566,6 +568,16 @@ function AnnotationPianoRoll({ track, annotation, level, categories, selection, 
   }, [noteById, width, height, endTick, minPitch, maxPitch]);
   const sourceVisuals = useMemo(() => sourceSegments.map((segment) => ({ segment, box: geometryFor(segment) })).filter((item) => item.box), [sourceSegments, geometryFor]);
   const currentVisuals = useMemo(() => layer.segments.map((segment) => ({ segment, box: geometryFor(segment) })).filter((item) => item.box), [layer.segments, geometryFor]);
+  const located = location?.level === level ? currentVisuals.find(({ segment }) => segment.id === location.segmentId) : null;
+  const focusedTreeKey = located ? `tree:${track.id}:${level}:${located.segment.id}` : null;
+  useLayoutEffect(() => {
+    if (!located) return;
+    const scroller = scrollRef.current;
+    const { x, width } = located.box;
+    panelRef.current.scrollIntoView({ behavior: 'instant', block: 'start', inline: 'nearest' });
+    scroller.scrollLeft = x + width / 2 - scroller.clientWidth / 2;
+    scroller.querySelector('.word-tree .tree-node.focused')?.focus({ preventScroll: true });
+  }, [located, location]);
   const selectedIds = selection?.trackId === track.id ? new Set(selection.noteIds) : new Set();
   const selectedSourceIds = selection?.trackId === track.id ? new Set(selection.sourceSegmentIds) : new Set();
   const pointFromEvent = (event) => {
@@ -597,7 +609,7 @@ function AnnotationPianoRoll({ track, annotation, level, categories, selection, 
     try { svgRef.current.releasePointerCapture(event.pointerId); } catch { /* pointer capture may already be released */ }
   };
 
-  return <section className="panel annotation-roll-panel">
+  return <section className="panel annotation-roll-panel" ref={panelRef}>
     <div className="panel-heading annotation-roll-heading">
       <div><h2>{track.name}</h2><span className="meta">{notes.length} 音符 · {layer.name} · {layerCoverage(annotation, level).percent}% 已覆盖</span></div>
       <div className="annotation-roll-tools">
@@ -609,8 +621,8 @@ function AnnotationPianoRoll({ track, annotation, level, categories, selection, 
     </div>
     <div className="roll-scroll" ref={scrollRef}>
       <HierarchyTree track={track} words={currentWords} width={width} endTick={endTick} onPlay={onPlay} playing={playing} selectedWordId={selectedWordId}
-        providedModel={hierarchyModel} selectedNodes={selectedSourceIds} onSelectNodes={onSelectNodes}
-        onAggregate={onAggregate} canAggregate={canAggregate && selection?.kind === 'tree' && selection.trackId === track.id} />
+        providedModel={hierarchyModel} selectedNodes={selectedSourceIds} focusedInstanceKey={focusedTreeKey} onSelectNodes={onSelectNodes}
+        onAggregate={onAggregate} canAggregate={canAggregate && selection?.kind === 'tree' && selection.trackId === track.id} onDelete={onDelete} />
       <svg
         ref={svgRef}
         className={`piano-roll annotation-roll ${canSelectNotes ? '' : 'read-only'}`}
@@ -636,7 +648,7 @@ function AnnotationPianoRoll({ track, annotation, level, categories, selection, 
           const category = categoryById.get(segment.categoryId);
           const color = category?.color ?? (segment.categoryId === 'SONG' ? '#77766d' : '#5e5d55');
           const selected = selectedSourceIds.has(segment.id);
-          return <g key={segment.id} className={`manual-word mw-playable ${segment.automatic ? 'automatic' : ''} ${selected ? 'selected' : ''}`} style={{ color, pointerEvents: canSelectNotes ? undefined : 'all' }}
+          return <g key={segment.id} data-segment-id={segment.id} className={`manual-word mw-playable ${segment.automatic ? 'automatic' : ''} ${selected ? 'selected' : ''} ${segment === located?.segment ? 'focused' : ''}`} style={{ color, pointerEvents: canSelectNotes ? undefined : 'all' }}
             role="button" tabIndex="0" aria-label={`试听${category?.label ?? '片段'}`}
             onClick={canSelectNotes ? undefined : () => playSegment(segment)}
             onKeyDown={(event) => playOnKey(event, () => playSegment(segment))}>
@@ -838,6 +850,7 @@ export default function App() {
   const [loadedCategories, setLoadedCategories] = useState([]);
   const [annotationLevel, setAnnotationLevel] = useState(1);
   const [annotationSelection, setAnnotationSelection] = useState(null);
+  const [annotationLocation, setAnnotationLocation] = useState(null);
   const [annotationCategory, setAnnotationCategory] = useState(null);
   const [annotationMessage, setAnnotationMessage] = useState('');
   const [annotationHistory, setAnnotationHistory] = useState([]);
@@ -928,6 +941,7 @@ export default function App() {
       if (annotationSourceId.current !== data.sourceId || fileSource?.restore) {
         annotationSourceId.current = data.sourceId;
         setAnnotationTracks(restored);
+        setAnnotationLocation(null);
         setLoadedCategories(saved?.categories ?? []);
       }
       const annotatedIds = (saved?.tracks ?? []).filter((track) =>
@@ -1196,6 +1210,7 @@ export default function App() {
   const visibleAnnotationTracks = useMemo(() => annotationTracks.filter((track) => editorTrackIds.includes(track.trackId)),
     [annotationTracks, editorTrackIds]);
   const displayedAnnotationTrack = visibleAnnotationTracks.find((track) => track.trackId === annotationSelection?.trackId)
+    ?? visibleAnnotationTracks.find((track) => track.trackId === annotationLocation?.trackId)
     ?? visibleAnnotationTracks[0] ?? annotationTracks[0];
   const annotationLayers = displayedAnnotationTrack?.layers ?? [];
   const annotationMaxLevel = Math.max(0, annotationLayers.length - 1);
@@ -1223,7 +1238,26 @@ export default function App() {
     () => buildAnnotationView(visibleAnnotationTracks, annotationSourceTracks, annotationLevel, annotationCategories),
     [visibleAnnotationTracks, annotationSourceTracks, annotationLevel, annotationCategories],
   );
+  const deletionSelection = annotationSelection?.kind === 'tree' ? annotationSelection : annotationLocation;
+  const deletionTrack = visibleAnnotationTracks.find((track) => track.trackId === deletionSelection?.trackId);
+  const deletionIds = new Set(deletionSelection?.sourceSegmentIds ?? [deletionSelection?.segmentId]);
+  const deletionTargets = deletionTrack?.layers[deletionSelection.level]?.segments
+    .filter((segment) => !segment.automatic && deletionIds.has(segment.id))
+    .map((segment) => ({ trackId: deletionTrack.trackId, segmentId: segment.id })) ?? [];
   const rememberAnnotation = () => setAnnotationHistory((old) => [...old.slice(-99), { tracks: annotationTracks, level: annotationLevel }]);
+  const clearAnnotationSelection = () => {
+    setAnnotationSelection(null);
+    setAnnotationLocation(null);
+    setAnnotationCategory(null);
+    setAnnotationMessage('');
+  };
+  const locateAnnotation = ({ trackId, segmentId, level, categoryId }) => {
+    clearAnnotationSelection();
+    setEditingAnnotation(null);
+    setAnnotationLevel(level);
+    setAnnotationLocation({ trackId, segmentId, level });
+    setSelectedWordId(categoryId);
+  };
   const openSimilaritySearch = (word, trackId) => {
     if (!word.notes.length || word.automatic) return;
     setSearchTemplate({ notes: word.notes, trackId, segmentId: word.instanceId, level: word.level, categoryId: word.id });
@@ -1232,44 +1266,47 @@ export default function App() {
   };
   const acceptSimilarSegments = (candidates, template, parameters) => {
     const result = acceptAnnotationMatches(annotationTracks, template.level, candidates, template.categoryId, template, parameters);
-    if (!result.added.length) { setAnnotationMessage('未添加标注：候选已标注或与当前结果冲突，请重新查找。'); return; }
+    if (!result.added.length) return '候选已标注或与当前结果冲突，请重新查找。';
     rememberAnnotation();
+    stop();
     setAnnotationTracks(result.tracks);
-    setAnnotationLevel(template.level);
+    setSearchTemplate(null);
+    setSaveMessage('');
+    locateAnnotation({ ...result.added[0], level: template.level, categoryId: template.categoryId });
     setAnnotationMessage(`已接受 ${result.added.length} 个片段，标为词类 ${template.categoryId}。可在标注结果中筛选「辅助标注」修改或删除，也可撤销整批。`);
   };
-  const deleteManagedAnnotations = (targets) => {
+  const deleteManagedAnnotations = (targets, level = annotationLevel) => {
     if (!targets.length) return;
     rememberAnnotation();
-    setAnnotationTracks(deleteAnnotationSegments(annotationTracks, annotationLevel, targets));
+    stop();
+    setAnnotationTracks(deleteAnnotationSegments(annotationTracks, level, targets));
     setSearchTemplate(null); setEditingAnnotation(null); clearAnnotationSelection();
+    setSaveMessage('');
     setAnnotationMessage(`已删除 ${targets.length} 个标注，可撤销。`);
   };
+  const deleteSelectedAnnotations = () => deleteManagedAnnotations(deletionTargets, deletionSelection.level);
   const reclassifyAnnotations = (targets, categoryId) => {
     if (!targets.length) return;
     rememberAnnotation();
     setAnnotationTracks(annotationTracks.map((track) => targets.filter((target) => target.trackId === track.trackId)
       .reduce((next, target) => editAnnotation(next, annotationLevel, target.segmentId, { categoryId }), track)));
     setSearchTemplate(null); setEditingAnnotation(null); clearAnnotationSelection();
+    setSelectedWordId(categoryId); setSaveMessage('');
     setAnnotationMessage(`已将 ${targets.length} 个标注改为词类 ${categoryId}，可撤销。`);
   };
   const editManagedAnnotation = ({ word, trackId, segmentId }) => {
     setEditingAnnotation({ trackId, segmentId, level: word.level, categoryId: word.id });
-    setSearchTemplate(null); setAnnotationSelection(null); setAnnotationCategory(word.id);
+    setSearchTemplate(null); setAnnotationSelection(null); setAnnotationLocation(null); setAnnotationCategory(word.id);
     setAnnotationLevel(word.level === 1 ? 1 : word.level - 1);
     setAnnotationMessage(`正在编辑词类 ${word.id}：重新选择范围后点击「保存修改」。`);
     document.querySelector('.annotation-roll-panel')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-  };
-  const clearAnnotationSelection = () => {
-    setAnnotationSelection(null);
-    setAnnotationCategory(null);
-    setAnnotationMessage('');
   };
   const selectAnnotationNodes = (trackId, level, ids, toggle, kind = 'tree', audition = true) => {
     const track = annotationTracks.find((item) => item.trackId === trackId);
     const layer = track?.layers[level];
     if (!layer) return;
 
+    setAnnotationLocation(null);
     setAnnotationLevel(kind === 'tree' ? level : 1);
     const sameLayer = annotationSelection?.trackId === trackId && annotationSelection.level === level && annotationSelection.kind === kind;
     const nextIds = new Set(toggle && sameLayer ? annotationSelection.sourceSegmentIds : []);
@@ -1303,6 +1340,7 @@ export default function App() {
         noteIds: annotationSelection.noteIds, sourceSegmentIds, categoryId: annotationCategory,
       }) : track));
       setAnnotationLevel(editingAnnotation.level); setEditingAnnotation(null); setSearchTemplate(null);
+      setSelectedWordId(annotationCategory); setSaveMessage('');
       clearAnnotationSelection(); setAnnotationMessage('已修改标注范围，可撤销。');
       return;
     }
@@ -1311,8 +1349,11 @@ export default function App() {
     rememberAnnotation();
     setAnnotationTracks(result.tracks);
     setAnnotationLevel(result.parentLevel);
+    setSearchTemplate(null);
+    setSelectedWordId(result.segment.categoryId); setSaveMessage('');
     clearAnnotationSelection();
-    setAnnotationMessage(`已在 L${result.parentLevel} 生成词类 ${result.segment.categoryId} 节点`);
+    setAnnotationMessage(result.replaced ? `已将 L${result.parentLevel} 的原标注改为词类 ${result.segment.categoryId}`
+      : `已在 L${result.parentLevel} 生成词类 ${result.segment.categoryId} 节点`);
   };
   const undoLastAnnotation = () => {
     if (!lastAnnotation) return;
@@ -1321,6 +1362,7 @@ export default function App() {
     setAnnotationHistory((old) => old.slice(0, -1));
     setSearchTemplate(null); setEditingAnnotation(null);
     clearAnnotationSelection();
+    setSaveMessage('');
     setAnnotationMessage('已撤销上次标注');
   };
   useEffect(() => {
@@ -1336,7 +1378,7 @@ export default function App() {
         return;
       }
       if (event.ctrlKey || event.altKey || event.metaKey) return;
-      if (event.key === 'Escape' && annotationSelection) {
+      if (event.key === 'Escape' && (annotationSelection || annotationLocation)) {
         event.preventDefault();
         clearAnnotationSelection();
         return;
@@ -1356,7 +1398,7 @@ export default function App() {
     };
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [canAggregate, annotationCategories, annotationCategory, annotationSelection, annotationTracks, annotationLevel, editingAnnotation, lastAnnotation, mode]);
+  }, [canAggregate, annotationCategories, annotationCategory, annotationSelection, annotationLocation, annotationTracks, annotationLevel, editingAnnotation, lastAnnotation, mode]);
   const saveAnnotations = async (download = false) => {
     setSavingAnnotation(true);
     setSaveMessage('');
@@ -1581,9 +1623,10 @@ export default function App() {
           {annotationSourceTracks.map((track) => {
             const annotation = annotationTracks.find((item) => item.trackId === track.id);
             return annotation?.layers[annotationLevel] && <AnnotationPianoRoll key={track.id} track={track} annotation={annotation} level={annotationLevel}
-              categories={annotationCategories} selection={annotationSelection} onSelectNodes={selectAnnotationNodes}
+              categories={annotationCategories} selection={annotationSelection} location={annotationLocation?.trackId === track.id ? annotationLocation : null} onSelectNodes={selectAnnotationNodes}
               onSelectNotes={(trackId, ids, toggle, audition) => selectAnnotationNodes(trackId, 0, ids, toggle, 'roll', audition)}
               onAggregate={confirmAnnotation} canAggregate={canAggregate} onMessage={setAnnotationMessage}
+              onDelete={deletionTargets.length && deletionTrack.trackId === track.id ? deleteSelectedAnnotations : undefined}
               onPlay={playAnnotationWord} playing={playing} selectedWordId={selectedWordId} tpb={annotationTpb} />;
           })}
           <div className="analysis-grid">
@@ -1600,6 +1643,7 @@ export default function App() {
             onPlay={playAnnotationWord} playing={playing} Preview={WordPianoRoll} />}
           <AnnotationResults key={`${midi?.sourceId}:${annotationLevel}`} level={annotationLevel} sequences={managedAnnotationView.sequences}
             categories={annotationCategories} trackNames={trackNames} onDelete={deleteManagedAnnotations} onReclassify={reclassifyAnnotations}
+            onLocate={locateAnnotation} location={annotationLocation}
             onEdit={editManagedAnnotation} onSearch={openSimilaritySearch} onPlay={playAnnotationWord} playing={playing} Preview={WordPianoRoll} />
         </>}
       </div>
