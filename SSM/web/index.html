@@ -58,9 +58,8 @@
             <div class="code-line with-parameters"><code><b>若启用</b></code><label class="inline-param"><input data-param="removeSelfSimilarity" type="checkbox" value="1">去除自相似</label></div>
             <div class="code-indent">
               <div class="code-line"><code><b>遍历</b> 匹配斜线与短候选，按格数从多到少，同长按检测顺序</code></div>
-              <div class="code-line"><code>包含它的矩形 ← 完全覆盖斜线首末格的所有矩形</code></div>
-              <div class="code-line"><code><b>若</b> 其中已有保留的斜线，跳过当前斜线</code></div>
-              <div class="code-line"><code><b>否则</b> 保留斜线，并标记包含它的每个矩形</code></div>
+              <div class="code-line"><code><b>裁掉</b> 斜线落在已有保留斜线的矩形内的部分</code></div>
+              <div class="code-line"><code><b>保留</b> 未裁剪的斜线和至少 2 格的连续剩余段，标记它们经过的矩形</code></div>
             </div>
             <div class="code-line"><code><b>输出</b> 矩形与保留的斜线，转置到上三角。短候选用虚线显示</code></div>
           </div>

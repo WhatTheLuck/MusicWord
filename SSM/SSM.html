@@ -815,9 +815,8 @@ between the sampled pitches.
             <div class="code-line with-parameters"><code><b>若启用</b></code><label class="inline-param"><input data-param="removeSelfSimilarity" type="checkbox" value="1">去除自相似</label></div>
             <div class="code-indent">
               <div class="code-line"><code><b>遍历</b> 匹配斜线与短候选，按格数从多到少，同长按检测顺序</code></div>
-              <div class="code-line"><code>包含它的矩形 ← 完全覆盖斜线首末格的所有矩形</code></div>
-              <div class="code-line"><code><b>若</b> 其中已有保留的斜线，跳过当前斜线</code></div>
-              <div class="code-line"><code><b>否则</b> 保留斜线，并标记包含它的每个矩形</code></div>
+              <div class="code-line"><code><b>裁掉</b> 斜线落在已有保留斜线的矩形内的部分</code></div>
+              <div class="code-line"><code><b>保留</b> 未裁剪的斜线和至少 2 格的连续剩余段，标记它们经过的矩形</code></div>
             </div>
             <div class="code-line"><code><b>输出</b> 矩形与保留的斜线，转置到上三角。短候选用虚线显示</code></div>
           </div>
@@ -1372,7 +1371,7 @@ function apply(data) {
   $("rectangleCount").hidden = !data.rectangles;
   text("rectangleCount", "矩形 " + (data.rectangles?.length ?? 0) + " 个");
   $("removedLineCount").hidden = !data.config.removeSelfSimilarity;
-  text("removedLineCount", "已去除 " + (data.removedLineCount ?? 0) + " 条斜线");
+  text("removedLineCount", "已去重 " + (data.removedLineCount ?? 0) + " 条斜线");
   matrixTooltip.hidden = true;
   selection = cursor = hoveredLine = timelineHover = null;
   hoveredTreeLevel = pinnedTreeLevel = null;
@@ -2135,10 +2134,12 @@ function updateRectangleHover() {
   if (index < 0) return;
   const [col, row, cols, rows] = result.rectangles[index];
   const stride = result.stride;
-  rectangleMatches = selectableLines.filter(([x0, x1, y0, y1]) =>
-    col * stride <= x0 && x1 < (col + cols) * stride &&
-    row * stride <= y0 && y1 < (row + rows) * stride
-  );
+  rectangleMatches = selectableLines.filter(([x0, x1, y0]) => {
+    const startCol = Math.floor(x0 / stride), startRow = Math.floor(y0 / stride);
+    const first = Math.max(0, col - startCol, row - startRow);
+    return startCol + first <= Math.floor(x1 / stride) &&
+      startCol + first < col + cols && startRow + first < row + rows;
+  });
 }
 function showMatrixTooltip(a, b, score, filtered, reflected) {
   matrixTooltip.hidden = false;
@@ -2156,7 +2157,7 @@ function showMatrixTooltip(a, b, score, filtered, reflected) {
     const [, , cols, rows] = result.rectangles[hoveredRectangle];
     const side = (cells) => coordinateFormatter.format(cells * result.stride / result.tpb);
     text("tooltipRectangleSize", "矩形 · 宽 " + side(rows) + " 拍 · 高 " + side(cols) + " 拍");
-    text("tooltipRectangleRemoved", "框内去掉 " + (result.rectangleRemovedCounts?.[hoveredRectangle] ?? 0) + " 条斜线");
+    text("tooltipRectangleRemoved", "框内去重 " + (result.rectangleRemovedCounts?.[hoveredRectangle] ?? 0) + " 条斜线");
   }
   const {left, top} = canvas.getBoundingClientRect();
   const x = left + geometry.left + (cursor.px ?? (cursor.x + .5) * geometry.cellX);

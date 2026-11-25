@@ -195,15 +195,28 @@ def run_singletrack_ssm_pipeline(
     removed_line_count = 0
     rectangle_removed_counts = []
     if remove_self_similarity and rectangles:
-        count_before = len(diag_lines_f) + len(short_lines)
-        kept, rectangle_removed_counts = remove_redundant_ssm_diagonals(
+        clipped, rectangle_removed_counts = remove_redundant_ssm_diagonals(
             [line for line in diag_lines_f if line[0] != line[2]] + short_lines,
             rectangles, stride_tick,
         )
-        diag_lines_f = [line for line in diag_lines_f if line[0] == line[2] or line in kept]
-        short_lines = [line for line in short_lines if line in kept]
-        split_sources = [(piece, source) for piece, source in split_sources if piece in kept]
-        removed_line_count = count_before - len(diag_lines_f) - len(short_lines)
+        removed_line_count = len(clipped)
+        short_lines = [piece for line in short_lines for piece in clipped.get(line, (line,))]
+        source_by_split = dict(split_sources)
+        split_sources = []
+        kept_lines = []
+        for line in diag_lines_f:
+            source = source_by_split.get(line)
+            # Overlap truncation has its own length cutoff for formal matches.
+            min_ticks = split_min_beats * tpb if source is not None else min_len * stride_tick
+            for piece in clipped.get(line, (line,)):
+                if line in clipped and piece[1] - piece[0] + stride_tick < min_ticks:
+                    if include_short_lines:
+                        short_lines.append(piece)
+                    continue
+                kept_lines.append(piece)
+                if source is not None:
+                    split_sources.append((piece, source))
+        diag_lines_f = kept_lines
     if max_structure_lines is not None and sum(x0 != y0 for x0, _, y0, _ in diag_lines_f) > max_structure_lines:
         raise ValueError(f"匹配线段超过 {max_structure_lines} 条，请提高阈值或最短匹配长度。")
 

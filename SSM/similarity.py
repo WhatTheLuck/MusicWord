@@ -130,39 +130,65 @@ def find_ssm_rectangles(ssm, stride_tick, min_side_ticks):
 
 
 def remove_redundant_ssm_diagonals(lines, rectangles, stride_tick):
-    """Return the kept lines and number removed from each containing rectangle."""
+    """Return replacements for clipped lines and the number clipped in each rectangle."""
     if not rectangles:
-        return set(lines), []
+        return {}, []
 
     bounds = np.asarray(rectangles, dtype=np.intp)
     left, top, width, height = bounds.T
     right, bottom = left + width, top + height
-    # Only look at rectangles that intersect the tile containing the first cell.
+    # Index rectangles by tile so a line only checks the tiles it crosses.
     tile_size = 32
     tiles = {}
     for index, (col, row, cols, rows) in enumerate(rectangles):
         for tile_row in range(row // tile_size, (row + rows - 1) // tile_size + 1):
             for tile_col in range(col // tile_size, (col + cols - 1) // tile_size + 1):
                 tiles.setdefault((tile_col, tile_row), []).append(index)
-    tiles = {tile: np.asarray(indices, dtype=np.intp) for tile, indices in tiles.items()}
     occupied = np.zeros(len(bounds), dtype=bool)
     removed = np.zeros(len(bounds), dtype=np.intp)
-    kept = set()
+    clipped = {}
     # The diagonal detector scans offsets first and then start cells.
-    for line in sorted(lines, key=lambda line: (line[0] - line[1], line[2] - line[0], line[0])):
-        x0, x1, y0, y1 = (int(tick // stride_tick) for tick in line)
-        nearby = tiles.get((x0 // tile_size, y0 // tile_size))
-        if nearby is None:
-            kept.add(line)
+    for line in sorted(set(lines), key=lambda line: (line[0] - line[1], line[2] - line[0], line[0])):
+        x0, x1, y0, _ = (int(tick // stride_tick) for tick in line)
+        length = x1 - x0 + 1
+        candidates = set()
+        offset = 0
+        while offset < length:
+            tile_col = (x0 + offset) // tile_size
+            tile_row = (y0 + offset) // tile_size
+            candidates.update(tiles.get((tile_col, tile_row), ()))
+            offset = min((tile_col + 1) * tile_size - x0, (tile_row + 1) * tile_size - y0)
+        if not candidates:
             continue
-        containing = nearby[(left[nearby] <= x0) & (top[nearby] <= y0)
-                            & (x1 < right[nearby]) & (y1 < bottom[nearby])]
-        if np.any(occupied[containing]):
-            removed[containing] += 1
-        else:
-            kept.add(line)
-            occupied[containing] = True
-    return kept, removed.tolist()
+
+        nearby = np.fromiter(candidates, dtype=np.intp)
+        first = np.maximum(0, np.maximum(left[nearby] - x0, top[nearby] - y0))
+        stop = np.minimum(length, np.minimum(right[nearby] - x0, bottom[nearby] - y0))
+        intersects = first < stop
+        blocked = intersects & occupied[nearby]
+        if not blocked.any():
+            occupied[nearby[intersects]] = True
+            continue
+
+        removed[nearby[blocked]] += 1
+        # Walk the union of blocked ranges and keep the gaps between them.
+        pieces = []
+        start = 0
+        for low, high in sorted(zip(first[blocked], stop[blocked])):
+            if low - start >= 2:
+                pieces.append((start, low))
+            start = max(start, high)
+        if length - start >= 2:
+            pieces.append((start, length))
+
+        replacements = []
+        for start, end in pieces:
+            occupied[nearby[(first < end) & (stop > start) & intersects]] = True
+            start_tick, end_tick = int(start) * stride_tick, (int(end) - 1) * stride_tick
+            replacements.append((line[0] + start_tick, line[0] + end_tick,
+                                 line[2] + start_tick, line[2] + end_tick))
+        clipped[line] = replacements
+    return clipped, removed.tolist()
 
 
 def find_ssm_diag_lines(ssm, stride_tick, tick_offset=0, ssm_disp_range=None,

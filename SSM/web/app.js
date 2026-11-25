@@ -414,7 +414,7 @@ function apply(data) {
   $("rectangleCount").hidden = !data.rectangles;
   text("rectangleCount", "矩形 " + (data.rectangles?.length ?? 0) + " 个");
   $("removedLineCount").hidden = !data.config.removeSelfSimilarity;
-  text("removedLineCount", "已去除 " + (data.removedLineCount ?? 0) + " 条斜线");
+  text("removedLineCount", "已去重 " + (data.removedLineCount ?? 0) + " 条斜线");
   matrixTooltip.hidden = true;
   selection = cursor = hoveredLine = timelineHover = null;
   hoveredTreeLevel = pinnedTreeLevel = null;
@@ -1286,10 +1286,12 @@ function updateRectangleHover() {
   if (index < 0) return;
   const [col, row, cols, rows] = result.rectangles[index];
   const stride = result.stride;
-  rectangleMatches = selectableLines.filter(([x0, x1, y0, y1]) =>
-    col * stride <= x0 && x1 < (col + cols) * stride &&
-    row * stride <= y0 && y1 < (row + rows) * stride
-  );
+  rectangleMatches = selectableLines.filter(([x0, x1, y0]) => {
+    const startCol = Math.floor(x0 / stride), startRow = Math.floor(y0 / stride);
+    const first = Math.max(0, col - startCol, row - startRow);
+    return startCol + first <= Math.floor(x1 / stride) &&
+      startCol + first < col + cols && startRow + first < row + rows;
+  });
 }
 function showMatrixTooltip(a, b, score, filtered, reflected) {
   matrixTooltip.hidden = false;
@@ -1307,7 +1309,7 @@ function showMatrixTooltip(a, b, score, filtered, reflected) {
     const [, , cols, rows] = result.rectangles[hoveredRectangle];
     const side = (cells) => coordinateFormatter.format(cells * result.stride / result.tpb);
     text("tooltipRectangleSize", "矩形 · 宽 " + side(rows) + " 拍 · 高 " + side(cols) + " 拍");
-    text("tooltipRectangleRemoved", "框内去掉 " + (result.rectangleRemovedCounts?.[hoveredRectangle] ?? 0) + " 条斜线");
+    text("tooltipRectangleRemoved", "框内去重 " + (result.rectangleRemovedCounts?.[hoveredRectangle] ?? 0) + " 条斜线");
   }
   const {left, top} = canvas.getBoundingClientRect();
   const x = left + geometry.left + (cursor.px ?? (cursor.x + .5) * geometry.cellX);
