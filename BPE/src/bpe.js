@@ -149,7 +149,7 @@ export function bpeStep(state, weights, metric, threshold) {
   const newId = `M${state.round + 1}`;
   const newEntry = {
     id: newId,
-    level: state.round + 1,
+    level: winner.representative.notes.length - 1,
     notes: winner.representative.notes,
     count: 0,
     label: `${winner.representative.leftId} + ${winner.representative.rightId}`,
@@ -195,22 +195,19 @@ export function buildBpeHistory(tracks, rounds, weights, metric, threshold) {
 }
 
 export function buildHierarchyModel(history, trackId) {
-  if (!history.length) return { nodes: [], edges: [], maxLevel: 0 };
-  const nodes = [];
+  if (!history.length) return { nodes: [], edges: [], maxLevel: 0, maxRank: 0 };
+  const nodes = new Map();
   const edges = [];
-  const nodeKeys = new Set();
-  const keyFor = (word) => `${wordLevelFromId(word.id)}:${word.sourceIndex}:${word.id}`;
-  const addNode = (word) => {
+  // A binary merge tree with n input notes has n - 1 aggregation operations.
+  const keyFor = (word) => `${word.notes.length - 1}:${word.sourceIndex}:${word.id}`;
+  const addNode = (word, round, rank) => {
     const key = keyFor(word);
-    if (!nodeKeys.has(key)) {
-      nodeKeys.add(key);
-      nodes.push({ key, word, level: wordLevelFromId(word.id) });
-    }
+    nodes.set(key, { key, word, level: word.notes.length - 1, round, rank });
     return key;
   };
 
   const baseSequence = history[0].sequences.find((sequence) => sequence.trackId === trackId);
-  baseSequence?.words.forEach(addNode);
+  baseSequence?.words.forEach((word) => addNode(word, 0, 0));
 
   for (let index = 1; index < history.length; index++) {
     const state = history[index];
@@ -219,27 +216,45 @@ export function buildHierarchyModel(history, trackId) {
     const previousSequence = previous.sequences.find((item) => item.trackId === trackId);
     if (!sequence || !previousSequence) continue;
 
-    sequence.words
-      .filter((word) => wordLevelFromId(word.id) === state.round)
-      .forEach((parent) => {
-        const parentKey = addNode(parent);
-        const start = parent.sourceIndex;
-        const end = start + parent.notes.length;
-        previousSequence.words
-          .filter((child) => child.sourceIndex >= start && child.sourceIndex < end)
-          .forEach((child) => edges.push({ parentKey, childKey: addNode(child) }));
-      });
+    sequence.words.filter((word) => word.id === `M${state.round}`).forEach((parent) => {
+      const start = parent.sourceIndex;
+      const end = start + parent.notes.length;
+      const children = previousSequence.words.filter((child) => child.sourceIndex >= start && child.sourceIndex < end)
+        .map((child) => nodes.get(keyFor(child)));
+      const rank = Math.max(0, ...children.map((child) => child.rank)) + 1;
+      const parentKey = addNode(parent, state.round, rank);
+      children.forEach((child) => edges.push({ parentKey, childKey: child.key }));
+    });
   }
 
+  const orderedNodes = [...nodes.values()];
   return {
-    nodes,
+    nodes: orderedNodes,
     edges,
-    maxLevel: nodes.reduce((maximum, node) => Math.max(maximum, node.level), 0),
+    maxLevel: orderedNodes.reduce((maximum, node) => Math.max(maximum, node.level), 0),
+    maxRank: orderedNodes.reduce((maximum, node) => Math.max(maximum, node.rank), 0),
   };
 }
 
-function wordLevelFromId(id) {
-  return String(id).startsWith('M') ? Number(String(id).slice(1)) : 0;
+export function buildBpeLayerView(hierarchies, visibleLevels) {
+  const levels = new Set(visibleLevels);
+  const tracks = new Map();
+  const entries = new Map();
+  for (const [trackId, model] of hierarchies) {
+    const nodes = model.nodes.filter(({ level }) => levels.has(level))
+      .sort((a, b) => b.level - a.level || a.word.sourceIndex - b.word.sourceIndex)
+      .map((node) => ({ ...node, trackId, instanceKey: `${trackId}:${node.key}` }));
+    const keys = new Set(nodes.map(({ key }) => key));
+    const edges = model.edges.filter(({ parentKey, childKey }) => keys.has(parentKey) && keys.has(childKey));
+    tracks.set(trackId, { ...model, nodes, edges });
+    for (const node of nodes) {
+      const { word, level } = node;
+      const key = `${word.id}:${level}`;
+      if (!entries.has(key)) entries.set(key, { ...word, key, level, instances: [] });
+      entries.get(key).instances.push(node);
+    }
+  }
+  return { tracks, entries: [...entries.values()].map((entry) => ({ ...entry, count: entry.instances.length })) };
 }
 
 export function wordColor(word) {

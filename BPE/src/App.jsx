@@ -5,9 +5,10 @@ import {
   DownloadSimple, Flask, GearSix, FloppyDisk, FolderOpen, Minus, Pause, PencilSimple, Play, Plus,
   Robot, SkipForward, SpeakerHigh, Stack, Trash, Waveform,
 } from '@phosphor-icons/react';
-import { FEATURE_KEYS, bpeStep, buildBpeHistory, buildHierarchyModel, makeEvents, normalizeTracks, wordColor } from './bpe';
+import { FEATURE_KEYS, bpeStep, buildBpeHistory, buildBpeLayerView, buildHierarchyModel, makeEvents, normalizeTracks, wordColor } from './bpe';
 import { PARAMETER_FILENAME, normalizeParameterFile } from './parameters';
 import { AnnotationResults, AnnotationSimilarity } from './AnnotationAssist';
+import BpeMetricHistory from './BpeMetricHistory';
 import { DEFAULT_MATCH_PARAMETERS, normalizeMatchParameters } from './annotation-match';
 import {
   ANNOTATION_CATEGORIES, aggregateAnnotationNodes, annotationCategoryCounts, buildAnnotationExport,
@@ -211,8 +212,8 @@ function WordPianoRoll({ word, active = false, progress = 0, highlightedNoteId =
   </svg>;
 }
 
-const wordLevel = (word) => Number.isFinite(word?.level) ? word.level : word.id.startsWith('M') ? Number(word.id.slice(1)) : 0;
-const levelLetter = (level) => String.fromCharCode(65 + Math.min(25, Math.max(0, level)));
+const levelLetter = (level) => level < 26 ? String.fromCharCode(65 + Math.max(0, level)) : String(level);
+const bpeWordType = (word) => `${word.id}:${word.notes.length - 1}`;
 
 function LevelBadge({ level }) {
   return <span className="level-badge" title={`层级 ${level}`}>{levelLetter(level)}</span>;
@@ -244,30 +245,28 @@ function SelectionPlaybackToggle({ checked, onChange }) {
   </label>;
 }
 
-function HierarchyTree({ track, history = [], words, width, endTick, onPlay, playing, selectedWordId, focusedInstanceKey, providedModel = null, selectedNodes, onSelectNodes, onAggregate, canAggregate, onDelete }) {
+function HierarchyTree({ track, model, width, endTick, onPlay, playing, selectedWordId, focusedInstanceKey, selectedNodes, onSelectNodes, onAggregate, canAggregate, onDelete }) {
   const selectable = Boolean(onSelectNodes);
   const gesture = useRef(null);
   const [marquee, setMarquee] = useState(null);
-  const model = useMemo(() => providedModel ?? buildHierarchyModel(history, track.id), [providedModel, history, track.id]);
-  const layerLabel = (level) => providedModel ? `L${level}` : `${levelLetter(level)} · L${level}`;
-  const currentBySource = useMemo(() => new Map(words.map((word, index) => [`${word.sourceIndex}:${word.id}`, index])), [words]);
   const nodeHeight = 32;
   const { layout, rows, treeHeight } = useMemo(() => {
     const scaleX = (tick) => (tick / endTick) * width;
-    const byLevel = Array.from({ length: model.maxLevel + 1 }, () => []);
+    const byRank = Array.from({ length: (model.maxRank ?? model.maxLevel) + 1 }, () => []);
     for (const node of model.nodes) {
       const start = Math.min(...node.word.notes.map((note) => note.onset));
       const end = Math.max(...node.word.notes.map((note) => note.onset + note.duration));
       const nodeWidth = Math.min(180, Math.max(16, scaleX(end) - scaleX(start) + 4));
       const center = (scaleX(start) + scaleX(end)) / 2;
       const x = Math.max(2, Math.min(width - nodeWidth - 2, center - nodeWidth / 2));
-      byLevel[node.level].push({ ...node, x, width: nodeWidth, start, end });
+      byRank[node.rank ?? node.level].push({ ...node, x, width: nodeWidth, start, end });
     }
     const layout = new Map();
     const rows = [];
     let y = 10;
-    for (let level = model.maxLevel; level >= 0; level--) {
-      const nodes = byLevel[level];
+    for (let rank = byRank.length - 1; rank >= 0; rank--) {
+      const nodes = byRank[rank];
+      if (!selectable && !nodes.length) continue;
       const laneEnds = [];
       if (selectable) nodes.sort((a, b) => a.x - b.x);
       for (const node of nodes) {
@@ -277,7 +276,7 @@ function HierarchyTree({ track, history = [], words, width, endTick, onPlay, pla
         layout.set(node.key, { ...node, y: y + lane * 38, height: nodeHeight });
       }
       const height = 48 + Math.max(0, laneEnds.length - 1) * 38;
-      rows.push({ level, y });
+      rows.push({ rank, y });
       y += height;
     }
     return { layout, rows, treeHeight: y + 10 };
@@ -335,9 +334,9 @@ function HierarchyTree({ track, history = [], words, width, endTick, onPlay, pla
       } : undefined}
       onPointerCancel={selectable ? () => { gesture.current = null; setMarquee(null); } : undefined}>
       <rect width={width} height={treeHeight} className="tree-background" />
-      {rows.map(({ level, y: rowY }) => <g key={level} aria-hidden="true">
+      {rows.map(({ rank, y: rowY }) => <g key={rank} aria-hidden="true">
           <line x1="0" x2={width} y1={rowY + nodeHeight / 2} y2={rowY + nodeHeight / 2} className="tree-row-line" />
-          <text x="7" y={rowY + 9} className="tree-level-label">{layerLabel(level)}</text>
+          {selectable && <text x="7" y={rowY + 9} className="tree-level-label">L{rank}</text>}
         </g>)}
       <g className="tree-links" aria-hidden="true">
         {model.edges.map((edge, index) => {
@@ -356,19 +355,17 @@ function HierarchyTree({ track, history = [], words, width, endTick, onPlay, pla
         const item = layout.get(node.key);
         const { word, level, x: nodeX, y: nodeY, width: nodeWidth } = item;
         const color = wordColor(word);
-        const key = `tree:${track.id}:${node.key}`;
-        const currentIndex = currentBySource.get(`${word.sourceIndex}:${word.id}`);
-        const target = currentIndex == null ? null : { trackId: track.id, index: currentIndex };
+        const key = node.instanceKey ?? `tree:${track.id}:${node.key}`;
         const active = playing?.key === key;
-        const selected = selectable ? selectedNodes?.has(word.instanceId) : selectedWordId === word.id;
+        const selected = selectable ? selectedNodes?.has(word.instanceId) : selectedWordId === bpeWordType(word);
         const focused = focusedInstanceKey === key;
         const low = Math.min(...word.notes.map((note) => note.pitch));
         const high = Math.max(...word.notes.map((note) => note.pitch));
         const pitchSpan = Math.max(1, high - low + 1);
         const tickSpan = Math.max(1, item.end - item.start);
         const clipId = `tree-clip-${track.id}-${node.key}`.replace(/[^a-zA-Z0-9_-]/g, '-');
-        const playNode = () => onPlay(word, key, target);
-        return <g key={node.key} data-node-key={selectable ? node.key : undefined} data-level={selectable ? level : undefined}
+        const playNode = () => onPlay(word, key, track.id);
+        return <g key={node.key} data-node-key={selectable ? node.key : undefined} data-level={level}
           className={`tree-node ${active ? 'active' : ''} ${selected ? 'selected' : ''} ${focused ? 'focused' : ''}`} style={{ color }} role="button" tabIndex="0"
           aria-label={selectable ? `选择 L${level} ${word.label}，${word.notes.length} 个音符` : `播放层级 ${level} 音乐词 ${word.id}`}
           aria-pressed={selectable ? Boolean(selected) : undefined}
@@ -378,7 +375,7 @@ function HierarchyTree({ track, history = [], words, width, endTick, onPlay, pla
             event.preventDefault();
             playNode();
           }}>
-          <title>{layerLabel(level)} · {word.label ?? word.id} · {word.notes.length} 音符</title>
+          <title>L{level} · {word.label ?? word.id} · {word.notes.length} 音符</title>
           <defs><clipPath id={clipId}><rect x={nodeX + 2} y={nodeY + 2} width={Math.max(1, nodeWidth - 4)} height={nodeHeight - 4} rx="3" /></clipPath></defs>
           <rect className="tree-node-shell" x={nodeX} y={nodeY} width={nodeWidth} height={nodeHeight} rx="4" />
           <g clipPath={`url(#${clipId})`}>
@@ -388,7 +385,7 @@ function HierarchyTree({ track, history = [], words, width, endTick, onPlay, pla
               return <rect key={`${note.id ?? note.pitch}:${index}`} className="tree-node-note" x={noteX} y={noteY} width={Math.max(2.5, (note.duration / tickSpan) * (nodeWidth - 6))} height={Math.max(2.5, (nodeHeight - 10) / pitchSpan)} rx="1" />;
             })}
           </g>
-          {nodeWidth >= 34 && <text className="tree-node-label" x={nodeX + 5} y={nodeY + nodeHeight - 5}>{providedModel ? word.label : `${levelLetter(level)} · ${word.id}`}</text>}
+          {nodeWidth >= 34 && <text className="tree-node-label" x={nodeX + 5} y={nodeY + nodeHeight - 5}>{selectable ? word.label : `L${level} · ${word.id}`}</text>}
         </g>;
       })}
       {marquee && <rect className="selection-marquee" {...marquee} />}
@@ -396,14 +393,13 @@ function HierarchyTree({ track, history = [], words, width, endTick, onPlay, pla
   </>;
 }
 
-function PianoRoll({ track, sequence, history, tpb, onPlay, playing, selectedWordId, focusedInstanceKey, jumpTarget, levels, visibleLevels, onToggleLevel, topWordsOnly, onTopWordsOnlyChange, referenceSegments = [] }) {
+function PianoRoll({ track, model, tpb, onPlay, playing, selectedWordId, focusedInstanceKey, jumpTarget, levels, visibleLevels, onToggleLevel, topWordsOnly, onTopWordsOnlyChange, referenceSegments = [] }) {
   const panelRef = useRef(null);
   const scrollRef = useRef(null);
   const zoomAnchor = useRef(null);
   const lastJump = useRef(null);
   const [zoom, setZoom] = useState(100);
   const zoomIndex = ROLL_ZOOM_LEVELS.indexOf(zoom);
-  const words = sequence?.words ?? [];
   const notes = track.events;
   const minPitch = Math.max(0, Math.min(...notes.map((n) => n.pitch)) - 2);
   const maxPitch = Math.min(127, Math.max(...notes.map((n) => n.pitch)) + 2);
@@ -427,37 +423,12 @@ function PianoRoll({ track, sequence, history, tpb, onPlay, playing, selectedWor
     scrollRef.current.scrollLeft = anchor.position * width - anchor.offset;
     zoomAnchor.current = null;
   }, [width]);
-  const wordInstances = useMemo(() => {
-    if (topWordsOnly) return words.map((word, index) => ({ word, level: wordLevel(word), currentIndex: index, key: `${track.id}:${index}` }));
-
-    const currentBySource = new Map(words.map((word, index) => [`${word.sourceIndex}:${word.id}`, index]));
-    return history.flatMap((layer) => {
-      const layerSequence = layer.sequences.find((item) => item.trackId === track.id);
-      if (!layerSequence) return [];
-      return layerSequence.words
-        .filter((word) => layer.round === 0 ? wordLevel(word) === 0 : wordLevel(word) === layer.round)
-        .filter((word) => visibleLevels.includes(wordLevel(word)))
-        .map((word, index) => {
-          const level = wordLevel(word);
-          const currentIndex = currentBySource.get(`${word.sourceIndex}:${word.id}`);
-          return {
-            word,
-            level,
-            currentIndex,
-            key: currentIndex == null ? `${track.id}:layer:${level}:${word.sourceIndex ?? index}` : `${track.id}:${currentIndex}`,
-          };
-        });
-    }).sort((a, b) => b.level - a.level || (a.word.sourceIndex ?? 0) - (b.word.sourceIndex ?? 0));
-  }, [history, topWordsOnly, track.id, visibleLevels, words]);
   useEffect(() => {
     if (!jumpTarget || jumpTarget.trackId !== track.id || jumpTarget === lastJump.current) return;
-    const targetWord = words[jumpTarget.index];
-    if (!targetWord) return;
     lastJump.current = jumpTarget;
-    const start = Math.min(...targetWord.notes.map((note) => note.onset));
     panelRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
-    scrollRef.current?.scrollTo({ left: Math.max(0, x(start) - scrollRef.current.clientWidth / 2), behavior: 'smooth' });
-  }, [jumpTarget, track.id, words, width, endTick]);
+    scrollRef.current?.scrollTo({ left: Math.max(0, x(jumpTarget.start) - scrollRef.current.clientWidth / 2), behavior: 'smooth' });
+  }, [jumpTarget, track.id, width, endTick]);
   return <section className="panel piano-panel" ref={panelRef} data-top-words-only={topWordsOnly || undefined}>
     <div className="panel-heading">
       <div><span className="kicker">PIANO ROLL</span><h2>{track.name}</h2></div>
@@ -475,18 +446,18 @@ function PianoRoll({ track, sequence, history, tpb, onPlay, playing, selectedWor
       </div>
     </div>
     <div className="roll-scroll" ref={scrollRef}>
-      <HierarchyTree track={track} history={history} words={words} width={width} endTick={endTick} onPlay={onPlay} playing={playing} selectedWordId={selectedWordId} focusedInstanceKey={focusedInstanceKey} />
+      <HierarchyTree track={track} model={model} width={width} endTick={endTick} onPlay={onPlay} playing={playing} selectedWordId={selectedWordId} focusedInstanceKey={focusedInstanceKey} />
       <svg className="piano-roll" width={width} height={height} role="group" aria-label={`${track.name} piano roll`}>
         <rect width={width} height={height} fill="var(--roll-bg)" />
         {Array.from({ length: Math.ceil(endTick / tpb) + 1 }, (_, i) => <line key={i} x1={x(i * tpb)} x2={x(i * tpb)} y1="0" y2={height} className={i % 4 === 0 ? 'bar-line' : 'beat-line'} />)}
         {notes.map((note) => <rect key={note.id} x={x(note.onset)} y={y(note.pitch)} width={Math.max(2, x(note.duration))} height="7" rx="1.5" fill="#76766d" opacity={topWordsOnly ? .45 : .74} />)}
-        {wordInstances.map(({ word, level, currentIndex, key }) => {
+        {model.nodes.map(({ word, level, instanceKey: key }) => {
           const start = Math.min(...word.notes.map((n) => n.onset));
           const end = Math.max(...word.notes.map((n) => n.onset + n.duration));
           const low = Math.min(...word.notes.map((n) => n.pitch));
           const high = Math.max(...word.notes.map((n) => n.pitch));
           const active = playing?.key === key;
-          const selected = selectedWordId === word.id;
+          const selected = selectedWordId === bpeWordType(word);
           const focused = focusedInstanceKey === key;
           const color = wordColor(word);
           const restingOpacity = topWordsOnly ? .28 : level ? .075 : .1;
@@ -497,8 +468,7 @@ function PianoRoll({ track, sequence, history, tpb, onPlay, playing, selectedWor
           const boxY = Math.max(1, y(high) - 3 - layerPad);
           const boxRight = Math.min(width - 1, x(end) + 2 + layerPad);
           const boxBottom = Math.min(height - 1, y(low) + 11 + layerPad);
-          const target = currentIndex == null ? null : { trackId: track.id, index: currentIndex };
-          const playInstance = () => onPlay(word, key, target);
+          const playInstance = () => onPlay(word, key, track.id);
           return <g className={`word-box ${level ? 'higher-level' : 'base-level'} ${selected ? 'selected' : ''} ${focused ? 'focused' : ''} ${active ? 'active' : ''}`} style={{ color }} key={key} role="button" tabIndex="0" aria-label={`播放层级 ${level} 音乐词 ${word.id}`} onClick={playInstance} onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); playInstance(); } }}>
             <rect x={boxX} y={boxY} width={Math.max(7, boxRight - boxX)} height={Math.max(15, boxBottom - boxY)} rx={3 + Math.min(2, level * .4)} fill={color} fillOpacity={fillOpacity} stroke={color} strokeWidth={strokeWidth} />
             <circle className="roll-level-dot" cx={boxX + 1} cy={boxY + 1} r="6" fill={color} />
@@ -549,7 +519,6 @@ function AnnotationPianoRoll({ track, annotation, level, categories, selection, 
     if (scroller && firstX > scroller.clientWidth * .8) scroller.scrollLeft = Math.max(0, firstX - 48);
   }, [track.id, firstOnset, endTick, width]);
   const layer = annotation.layers[level];
-  const currentWords = useMemo(() => buildAnnotationView([annotation], [track], level, categories).sequences[0]?.words ?? [], [annotation, track, level, categories]);
   const hierarchyModel = useMemo(() => buildAnnotationHierarchy(annotation, track, categories), [annotation, track, categories]);
   const canSelectNotes = level <= 1 && layer.role !== 'top';
   const sourceSegments = annotation.layers[0].segments;
@@ -633,8 +602,8 @@ function AnnotationPianoRoll({ track, annotation, level, categories, selection, 
       </div>
     </div>
     <div className="roll-scroll" ref={scrollRef}>
-      <HierarchyTree track={track} words={currentWords} width={width} endTick={endTick} onPlay={onPlay} playing={playing} selectedWordId={selectedWordId}
-        providedModel={hierarchyModel} selectedNodes={selectedSourceIds} focusedInstanceKey={focusedTreeKey} onSelectNodes={onSelectNodes}
+      <HierarchyTree track={track} model={hierarchyModel} width={width} endTick={endTick} onPlay={onPlay} playing={playing} selectedWordId={selectedWordId}
+        selectedNodes={selectedSourceIds} focusedInstanceKey={focusedTreeKey} onSelectNodes={onSelectNodes}
         onAggregate={onAggregate} canAggregate={canAggregate && selection?.kind === 'tree' && selection.trackId === track.id} onDelete={onDelete} />
       <svg
         ref={svgRef}
@@ -748,38 +717,27 @@ function AnnotationDictionary({ level, categories, entries, sequences, trackName
   </section>;
 }
 
-function Dictionary({ entries, sequences, trackNames, onPlay, playing, selectedWordId }) {
+function Dictionary({ entries, trackNames, onPlay, playing, selectedWordId }) {
   const [expandedWordId, setExpandedWordId] = useState(null);
   const sorted = [...entries].sort((a, b) => b.level - a.level || b.count - a.count);
-  const examplesByWord = useMemo(() => {
-    const examples = new Map();
-    sequences.forEach((sequence) => sequence.words.forEach((word, index) => {
-      if (!examples.has(word.id)) examples.set(word.id, []);
-      examples.get(word.id).push({ word, trackId: sequence.trackId, index });
-    }));
-    return examples;
-  }, [sequences]);
   return <section className="panel dictionary-panel">
     <div className="panel-heading"><div><span className="kicker">LEXICON</span><h2>音乐词字典</h2></div><span className="meta">{entries.length} WORDS</span></div>
     <div className="dictionary-grid">
       {sorted.map((word) => {
-        const examples = examplesByWord.get(word.id) ?? [];
-        const displayExamples = examples.length ? examples : [{ word, trackId: null, index: 0, representative: true }];
-        const expanded = expandedWordId === word.id;
-        return <article key={word.id} className={`word-card ${selectedWordId === word.id ? 'selected' : ''} ${expanded ? 'expanded' : ''}`} style={{ '--word-color': wordColor(word) }}>
-          <button className="word-card-main" aria-expanded={expanded} onClick={() => { setExpandedWordId(expanded ? null : word.id); onPlay(word, `dict:${word.id}`); }}>
+        const expanded = expandedWordId === word.key;
+        const playbackKey = `dict:${word.key}`;
+        return <article key={word.key} className={`word-card ${selectedWordId === word.key ? 'selected' : ''} ${expanded ? 'expanded' : ''}`} style={{ '--word-color': wordColor(word) }}>
+          <button className="word-card-main" aria-expanded={expanded} onClick={() => { setExpandedWordId(expanded ? null : word.key); onPlay(word, playbackKey); }}>
             <span className="word-top"><span><LevelBadge level={word.level} /><b>{word.id}</b></span><small>L{word.level}</small></span>
-            <WordPianoRoll word={word} active={playing?.key === `dict:${word.id}`} progress={playing?.progress} />
+            <WordPianoRoll word={word} active={playing?.key === playbackKey} progress={playing?.progress} />
             <span className="word-bottom"><span>{word.notes.length} notes</span><span>{word.count}× · {expanded ? '收起' : '样例'}</span></span>
           </button>
           {expanded && <div className="word-examples">
-            {displayExamples.map((example, index) => {
-              const key = example.representative ? `dict:${word.id}:representative` : `${example.trackId}:${example.index}`;
-              return <button key={key} className={playing?.key === key ? 'active' : ''} onClick={() => onPlay(example.word, key, example.representative ? null : { trackId: example.trackId, index: example.index })}>
-                <span>{example.representative ? '代表样例' : `${trackNames[example.trackId] ?? example.trackId} · #${example.index + 1}`}</span>
-                <WordPianoRoll word={example.word} active={playing?.key === key} progress={playing?.progress} />
-              </button>;
-            })}
+            {word.instances.map(({ word: example, trackId, instanceKey }, index) => <button key={instanceKey}
+              className={playing?.key === instanceKey ? 'active' : ''} onClick={() => onPlay(example, instanceKey, trackId)}>
+              <span>{trackNames[trackId] ?? trackId} · #{index + 1}</span>
+              <WordPianoRoll word={example} active={playing?.key === instanceKey} progress={playing?.progress} />
+            </button>)}
           </div>}
         </article>;
       })}
@@ -793,27 +751,46 @@ function FrequencyChart({ entries, onPlay, playing, selectedWordId, manual = fal
   return <section className="panel stats-panel">
     <div className="panel-heading"><div>{!manual && <span className="kicker">FREQUENCY</span>}<h2>词频分布</h2></div><ChartBar size={20} /></div>
     <div className="bar-chart">
-      {items.map((word) => <button key={word.id} onClick={() => onPlay(word, `stat:${word.id}`)} className={`${playing?.key === `stat:${word.id}` ? 'active' : ''} ${selectedWordId === word.id ? 'selected' : ''}`} style={{ '--word-color': wordColor(word) }}>
-        <span className="bar-label">{manual ? word.label : <><LevelBadge level={word.level} />{word.id}</>}</span>
-        <WordPianoRoll word={word} active={playing?.key === `stat:${word.id}`} progress={playing?.progress} />
-        <span className="bar-track"><i style={{ width: `${Math.max(2, word.count / max * 100)}%`, background: wordColor(word) }} /></span>
-        <b>{word.count}</b>
-      </button>)}
+      {items.map((word) => {
+        const key = word.key ?? word.id;
+        const playbackKey = `stat:${key}`;
+        const active = playing?.key === playbackKey;
+        return <button key={key} onClick={() => onPlay(word, playbackKey)} className={`${active ? 'active' : ''} ${selectedWordId === key ? 'selected' : ''}`} style={{ '--word-color': wordColor(word) }}>
+          <span className="bar-label">{manual ? word.label : <><LevelBadge level={word.level} />{word.id}</>}</span>
+          <WordPianoRoll word={word} active={active} progress={playing?.progress} />
+          <span className="bar-track"><i style={{ width: `${Math.max(2, word.count / max * 100)}%`, background: wordColor(word) }} /></span>
+          <b>{word.count}</b>
+        </button>;
+      })}
     </div>
   </section>;
 }
 
-function EventTable({ track, sequence, onPlay, playing, selectedWordId, focusedInstanceKey, tpb }) {
-  const wordForNote = new Map();
-  sequence?.words.forEach((word, index) => word.notes.forEach((note) => wordForNote.set(note.id, { word, index })));
+function EventTable({ track, nodes, onPlay, playing, selectedWordId, focusedInstanceKey, tpb }) {
+  const wordForNote = useMemo(() => {
+    const words = new Map();
+    for (const node of nodes) {
+      for (const { id } of node.word.notes) {
+        if (!words.has(id)) words.set(id, node);
+      }
+    }
+    return words;
+  }, [nodes]);
   return <section className="panel table-panel">
     <div className="panel-heading"><div><span className="kicker">EVENT STREAM</span><h2>音乐事件</h2></div><span className="meta">NORMALIZED 0–1</span></div>
     <div className="table-scroll"><table><thead><tr><th>#</th><th>词</th><th>词片段</th><th>音高</th><th>力度</th><th>时长</th><th>Onset</th><th>Δt Prev</th><th>Δt Next</th><th>Δp Prev</th><th>Δp Next</th><th>归一化向量</th><th /></tr></thead>
       <tbody>{track.events.slice(0, 500).map((event, row) => {
-        const hit = wordForNote.get(event.id); const key = `${track.id}:${hit?.index}`;
-        const target = hit && { trackId: track.id, index: hit.index };
-        return <tr key={event.id} className={`${playing?.key === key ? 'playing-row' : ''} ${selectedWordId === hit?.word.id ? 'selected-row' : ''} ${focusedInstanceKey === key ? 'focused-row' : ''}`} style={{ '--word-color': wordColor(hit?.word ?? 0) }}>
-          <td>{String(row + 1).padStart(3, '0')}</td><td><span className="token-tag">{hit && <LevelBadge level={wordLevel(hit.word)} />}{hit?.word.id}</span></td><td>{hit && <button className="table-word-roll has-highlight" onClick={() => onPlay(hit.word, key, target)} aria-label={`播放音乐词 ${hit.word.id}，高亮 ${event.name}`}><WordPianoRoll word={hit.word} active={playing?.key === key} progress={playing?.progress} highlightedNoteId={event.id} /></button>}</td><td><b>{event.name}</b> {event.pitch}</td><td>{event.velocity}</td><td>{event.duration}t <small>{(event.duration / tpb).toFixed(2)}b</small></td><td>{event.onset}t</td><td>{event.prevDelta}t</td><td>{event.nextDelta}t</td><td>{event.prevPitchDelta > 0 ? '+' : ''}{event.prevPitchDelta}st</td><td>{event.nextPitchDelta > 0 ? '+' : ''}{event.nextPitchDelta}st</td><td className="vector">{FEATURE_KEYS.map((feature) => event.normalized[feature].toFixed(2)).join(' · ')}</td><td><button className="icon-button" onClick={() => hit && onPlay(hit.word, key, target)} aria-label="播放音乐词"><Play size={13} weight="fill" /></button></td>
+        const hit = wordForNote.get(event.id);
+        const key = hit?.instanceKey;
+        const active = hit && playing?.key === key;
+        const playInstance = () => onPlay(hit.word, key, track.id);
+        const selected = hit && selectedWordId === bpeWordType(hit.word);
+        return <tr key={event.id} className={`${active ? 'playing-row' : ''} ${selected ? 'selected-row' : ''} ${focusedInstanceKey === key ? 'focused-row' : ''}`} style={{ '--word-color': wordColor(hit?.word ?? 0) }}>
+          <td>{String(row + 1).padStart(3, '0')}</td>
+          <td>{hit && <span className="token-tag"><LevelBadge level={hit.level} />{hit.word.id}</span>}</td>
+          <td>{hit && <button className="table-word-roll has-highlight" onClick={playInstance} aria-label={`播放音乐词 ${hit.word.id}，高亮 ${event.name}`}><WordPianoRoll word={hit.word} active={active} progress={playing?.progress} highlightedNoteId={event.id} /></button>}</td>
+          <td><b>{event.name}</b> {event.pitch}</td><td>{event.velocity}</td><td>{event.duration}t <small>{(event.duration / tpb).toFixed(2)}b</small></td><td>{event.onset}t</td><td>{event.prevDelta}t</td><td>{event.nextDelta}t</td><td>{event.prevPitchDelta > 0 ? '+' : ''}{event.prevPitchDelta}st</td><td>{event.nextPitchDelta > 0 ? '+' : ''}{event.nextPitchDelta}st</td><td className="vector">{FEATURE_KEYS.map((feature) => event.normalized[feature].toFixed(2)).join(' · ')}</td>
+          <td>{hit && <button className="icon-button" onClick={playInstance} aria-label="播放音乐词"><Play size={13} weight="fill" /></button>}</td>
         </tr>;
       })}</tbody></table></div>
     {track.events.length > 500 && <p className="table-note">为保证交互流畅，表格显示前 500 个事件；算法仍使用完整轨道。</p>}
@@ -876,7 +853,6 @@ export default function App() {
   const [playSelectionOnSelect, setPlaySelectionOnSelect] = useState(true);
   const [matchParameters, setMatchParameters] = useState(DEFAULT_MATCH_PARAMETERS);
   const [matchScope, setMatchScope] = useState('track');
-  const jumpCounter = useRef(0);
   const targetRoundRef = useRef(0);
   const roundRun = useRef(null);
   const lastBpeInputs = useRef(null);
@@ -1067,39 +1043,6 @@ export default function App() {
     setAnnotationMessage('');
   }, [annotationSourceTracks]);
   const state = history.at(-1);
-  const entries = state ? Object.values(state.dictionary) : [];
-  useEffect(() => {
-    const evaluation = controls.current?.algorithm;
-    if (!reference || !shared || !evaluation || mode !== 'algorithm') return;
-    if (loading || error) {
-      evaluation.setScore(loading ? '正在读取乐谱…' : '乐谱读取失败，无法比对。');
-      return;
-    }
-    if (midi?.sourceId !== reference.document.sourceId) {
-      evaluation.setScore('当前 MIDI 与所加载的标注不同。');
-      return;
-    }
-    if (!state) return;
-    const totals = { matches: 0, manual: 0, predicted: 0, covered: 0 };
-    const comparisons = [];
-    for (const sequence of state.sequences) {
-      const manual = referenceByTrack.get(sequence.trackId)?.manual ?? [];
-      if (!manual.length) continue;
-      const predictions = sequence.words.map((word) => ({
-        categoryId: word.id,
-        noteIds: word.notes.map((note) => note.id),
-        box: shared.noteBox(word.notes.map(({ onset, duration, pitch }) => ({
-          start: onset, end: onset + duration, pitch,
-        }))),
-      }));
-      const counts = shared.fragmentCounts(manual.map((segment) => segment.noteIds), predictions.map((word) => word.noteIds));
-      for (const key of Object.keys(totals)) totals[key] += counts[key];
-      const track = preparedTracks.find(({ id }) => id === sequence.trackId);
-      if (track) comparisons.push(shared.comparisonTrack(track.events, manual, predictions));
-    }
-    evaluation.setScore(shared.formatScores(totals, `第 ${state.round} 轮顶层`));
-    if (comparisons.length) evaluation.compare(comparisons);
-  }, [error, loading, midi, mode, preparedTracks, reference, referenceByTrack, shared, state]);
   const currentRound = state?.round ?? 0;
   const canRunRounds = !loading && !error && state && preparedTracks.length && !runningRounds;
   const runRounds = async (target) => {
@@ -1137,19 +1080,21 @@ export default function App() {
     setHistory(next);
     setRoundMessage('');
   };
-  const playWord = useCallback((word, key, target = null) => {
-    setSelectedWordId(word.id);
-    setFocusedInstanceKey(target ? key : null);
-    if (target) {
-      const level = wordLevel(word);
-      setHiddenLevels((old) => old.filter((item) => item !== level));
-      setJumpTarget({ ...target, nonce: ++jumpCounter.current });
+  const playWord = useCallback((word, key, trackId = null) => {
+    setSelectedWordId(bpeWordType(word));
+    setFocusedInstanceKey(trackId == null ? null : key);
+    if (trackId != null) {
+      setJumpTarget({ trackId, start: Math.min(...word.notes.map((note) => note.onset)) });
     }
     play(word, key, !key.startsWith('track:'));
   }, [play]);
   const trackNames = useMemo(() => Object.fromEntries((midi?.tracks ?? []).map((track) => [track.id, track.name])), [midi]);
-  const availableLevels = useMemo(() => [...new Set(entries.map((word) => word.level))].sort((a, b) => a - b), [entries]);
-  const visibleLevels = useMemo(() => availableLevels.filter((level) => !hiddenLevels.includes(level)), [availableLevels, hiddenLevels]);
+  const hierarchies = useMemo(() => new Map(mode === 'algorithm' && history.length
+    ? preparedTracks.map(({ id }) => [id, buildHierarchyModel(history, id)]) : []), [mode, preparedTracks, history]);
+  const availableLevels = useMemo(() => [...new Set([...hierarchies.values()].flatMap(({ nodes }) => nodes.map(({ level }) => level)))].sort((a, b) => a - b), [hierarchies]);
+  const visibleLevels = useMemo(() => topWordsOnly ? availableLevels.slice(-1) : availableLevels.filter((level) => !hiddenLevels.includes(level)),
+    [availableLevels, hiddenLevels, topWordsOnly]);
+  const layerView = useMemo(() => buildBpeLayerView(hierarchies, visibleLevels), [hierarchies, visibleLevels]);
   const toggleLevel = useCallback((level) => setHiddenLevels((old) => old.includes(level) ? old.filter((item) => item !== level) : [...old, level]), []);
   const currentParameters = useMemo(() => ({ tpb, saturation, metric, threshold, weights }), [tpb, saturation, metric, threshold, weights]);
   useLayoutEffect(() => {
@@ -1644,10 +1589,13 @@ export default function App() {
         {loading && <div className="skeleton"><i /><i /><i /></div>}
         {!loading && !error && !selectedTracks.length && <div className="state-message"><b>请选择至少一条轨道</b></div>}
         {embedded && <div className="panel shared-evaluation-panel" hidden={mode !== 'algorithm'} ref={algorithmMount} />}
+        {embedded && mode === 'algorithm' && <BpeMetricHistory history={history} hierarchies={hierarchies} tracks={preparedTracks}
+          referenceByTrack={referenceByTrack} reference={reference} sourceMatches={comparing} shared={shared} evaluation={controls.current?.algorithm}
+          loading={loading} error={error} visibleLevels={visibleLevels} topWordsOnly={topWordsOnly} />}
         {mode === 'algorithm' && !loading && state && <>
-          {preparedTracks.map((track) => <PianoRoll key={track.id} track={track} sequence={state.sequences.find((sequence) => sequence.trackId === track.id)} history={history} tpb={tpb} onPlay={playWord} playing={playing} selectedWordId={selectedWordId} focusedInstanceKey={focusedInstanceKey} jumpTarget={jumpTarget} levels={availableLevels} visibleLevels={visibleLevels} onToggleLevel={toggleLevel} topWordsOnly={topWordsOnly} onTopWordsOnlyChange={setTopWordsOnly} referenceSegments={referenceByTrack.get(track.id)?.manual} />)}
-          <div className="analysis-grid"><Dictionary entries={entries} sequences={state.sequences} trackNames={trackNames} onPlay={playWord} playing={playing} selectedWordId={selectedWordId} /><FrequencyChart entries={entries} onPlay={playWord} playing={playing} selectedWordId={selectedWordId} /></div>
-          {preparedTracks.map((track) => <EventTable key={track.id} track={track} sequence={state.sequences.find((sequence) => sequence.trackId === track.id)} onPlay={playWord} playing={playing} selectedWordId={selectedWordId} focusedInstanceKey={focusedInstanceKey} tpb={tpb} />)}
+          {preparedTracks.map((track) => <PianoRoll key={track.id} track={track} model={layerView.tracks.get(track.id)} tpb={tpb} onPlay={playWord} playing={playing} selectedWordId={selectedWordId} focusedInstanceKey={focusedInstanceKey} jumpTarget={jumpTarget} levels={availableLevels} visibleLevels={visibleLevels} onToggleLevel={toggleLevel} topWordsOnly={topWordsOnly} onTopWordsOnlyChange={setTopWordsOnly} referenceSegments={referenceByTrack.get(track.id)?.manual} />)}
+          <div className="analysis-grid"><Dictionary entries={layerView.entries} trackNames={trackNames} onPlay={playWord} playing={playing} selectedWordId={selectedWordId} /><FrequencyChart entries={layerView.entries} onPlay={playWord} playing={playing} selectedWordId={selectedWordId} /></div>
+          {preparedTracks.map((track) => <EventTable key={track.id} track={track} nodes={layerView.tracks.get(track.id).nodes} onPlay={playWord} playing={playing} selectedWordId={selectedWordId} focusedInstanceKey={focusedInstanceKey} tpb={tpb} />)}
         </>}
         {mode === 'annotation' && !loading && !error && annotationTracks.length > 0 && <>
           {annotationSourceTracks.map((track) => {

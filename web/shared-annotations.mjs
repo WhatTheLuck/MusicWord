@@ -282,10 +282,33 @@ export const metricNames = [
   ['Completeness', '完整性'], ['V-Measure', 'V-Measure'],
 ];
 
+export const historyMetricNames = [...metricNames, ['Precision', '精确率'], ['Recall', '召回率'], ['F1', 'F1']];
+
+export function fragmentMetrics({ matches, manual, predicted }) {
+  return {
+    Precision: predicted ? matches / predicted : 0,
+    Recall: manual ? matches / manual : 0,
+    F1: manual + predicted ? 2 * matches / (manual + predicted) : 0,
+  };
+}
+
+async function requestMetrics(body, signal) {
+  const response = await fetch('/activebasis/workbench-api', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body), signal,
+  });
+  const { result, error } = await response.json();
+  if (!response.ok || !result) throw new Error(error || '指标计算失败。');
+  return result;
+}
+
+export function annotationMetricSeries(rounds, signal) {
+  return requestMetrics({ action: 'annotation-metrics-series', rounds }, signal);
+}
+
 export function formatScores({ matches, manual, predicted, covered }, scope) {
   if (!manual) return '当前音轨在所选层没有人工标注。';
-  const precision = predicted ? matches / predicted : 0;
-  return `${scope} · ${covered} 个已标注音符 · 精确匹配 ${matches}/${manual} · 精确率 ${percent(precision)} · 召回率 ${percent(matches / manual)} · F1 ${percent(2 * matches / (manual + predicted))}`;
+  const { Precision, Recall, F1 } = fragmentMetrics({ matches, manual, predicted });
+  return `${scope} · ${covered} 个已标注音符 · 精确匹配 ${matches}/${manual} · 精确率 ${percent(Precision)} · 召回率 ${percent(Recall)} · F1 ${percent(F1)}`;
 }
 
 export function mountMidiPicker(container, { input, onPreset }) {
@@ -378,6 +401,10 @@ export function mountAnnotationControls(container, { toolbar, onLoad, onChange, 
   function clearMetrics() {
     comparison?.abort();
     metrics.textContent = '';
+  }
+
+  function showMetrics(result) {
+    metrics.textContent = metricNames.map(([key, name]) => `${name} ${decimal.format(result[key])}`).join(' · ');
   }
 
   const menuButton = (label, action) => {
@@ -485,23 +512,15 @@ export function mountAnnotationControls(container, { toolbar, onLoad, onChange, 
       clearMetrics();
       score.textContent = message;
     },
+    setMetrics: showMetrics,
     async compare(tracks, { retainResult = false } = {}) {
       clearMetrics();
       metrics.textContent = '正在计算标注比对指标…';
       const controller = new AbortController();
       comparison = controller;
       try {
-        const response = await fetch('/activebasis/workbench-api', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ action: 'annotation-metrics', tracks }),
-          signal: retainResult ? undefined : controller.signal,
-        });
-        const { result, error } = await response.json();
-        if (!response.ok || !result) throw new Error(error || '指标计算失败。');
-        if (!controller.signal.aborted) {
-          metrics.textContent = metricNames.map(([key, name]) => `${name} ${decimal.format(result[key])}`).join(' · ');
-        }
+        const result = await requestMetrics({ action: 'annotation-metrics', tracks }, retainResult ? undefined : controller.signal);
+        if (!controller.signal.aborted) showMetrics(result);
         return result;
       } catch (error) {
         if (!controller.signal.aborted) metrics.textContent = error.message;

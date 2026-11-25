@@ -510,10 +510,10 @@ function updateSharedAnnotation() {
   const counts = sharedApi.fragmentCounts(segments.map((segment) => segment.noteIds), groups);
   sharedControls.setScore(sharedApi.formatScores(counts, "结构树底层"));
   const scores = sharedControls.compare([sharedApi.comparisonTrack(notes, segments, predictions)], { retainResult: true });
-  recordMetricResult(scores, track.trackId, layerId);
+  recordMetricResult(scores, counts, track.trackId, layerId);
 }
 
-const metricColors = ["#ad9cf9", "#f2b66a", "#5fd2c1", "#ed92b9", "#8dbaff"];
+const metricColors = ["#ad9cf9", "#f2b66a", "#5fd2c1", "#ed92b9", "#8dbaff", "#c4dc7c", "#f88d7c", "#e2e7f2"];
 const metricNumbers = new Intl.NumberFormat("zh-CN", { maximumFractionDigits: 3, minimumFractionDigits: 3 });
 
 function resetMetricHistory() {
@@ -521,7 +521,7 @@ function resetMetricHistory() {
   $("metricHistory").hidden = true;
 }
 
-function recordMetricResult(scores, track, layer) {
+function recordMetricResult(scores, counts, track, layer) {
   if (comparisonHistory?.file !== resultFile || comparisonHistory?.track !== track || comparisonHistory?.layer !== layer) {
     resetMetricHistory();
     comparisonHistory = { file: resultFile, track, layer, entries: [] };
@@ -529,11 +529,11 @@ function recordMetricResult(scores, track, layer) {
   const history = comparisonHistory;
   const settings = JSON.stringify(result.config);
   if (history.entries.at(-1)?.settings === settings) return;
-  const entry = { settings };
+  const entry = { settings, counts };
   history.entries.push(entry);
   scores.then((values) => {
     if (history !== comparisonHistory) return;
-    if (values) entry.values = values;
+    if (values) entry.values = { ...values, ...sharedApi.fragmentMetrics(counts) };
     else history.entries.splice(history.entries.indexOf(entry), 1);
     drawMetricHistory();
   });
@@ -572,12 +572,13 @@ function drawMetricHistory() {
   ctx.stroke();
   ctx.setLineDash([]);
 
-  const selectedValues = points[selected].values;
+  const { values: selectedValues, counts } = points[selected];
   const pointStep = Math.max(1, Math.ceil(points.length * 5 / Math.max(1, right - left)));
-  $("metricLegend").replaceChildren(...sharedApi.metricNames.map(([key, label], series) => {
+  $("metricLegend").replaceChildren(...sharedApi.historyMetricNames.map(([key, label], series) => {
     const color = metricColors[series];
     ctx.strokeStyle = ctx.fillStyle = color;
     ctx.lineWidth = 1.6;
+    ctx.setLineDash(series >= sharedApi.metricNames.length ? [4, 3] : []);
     ctx.beginPath();
     for (const [index, { values }] of points.entries()) {
       if (index === 0) ctx.moveTo(x(index), y(values[key]));
@@ -595,7 +596,8 @@ function drawMetricHistory() {
     legend.textContent = label + " " + metricNumbers.format(selectedValues[key]);
     return legend;
   }));
-  text("metricPoint", `第 ${selected + 1} 次 · 共 ${points.length} 次计算`);
+  ctx.setLineDash([]);
+  text("metricPoint", `第 ${selected + 1} 次 / 共 ${points.length} 次 · 精确匹配 ${counts.matches}/${counts.manual}`);
 }
 
 async function loadClassicalExamples() {

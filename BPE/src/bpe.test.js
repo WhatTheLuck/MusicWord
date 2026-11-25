@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { sequenceSimilarity, initialState, bpeStep, buildBpeHistory, buildHierarchyModel, makeEvents, normalizeTracks } from './bpe';
+import { sequenceSimilarity, initialState, bpeStep, buildBpeHistory, buildBpeLayerView, buildHierarchyModel, makeEvents, normalizeTracks } from './bpe';
 
 const weights = { pitch: 1, velocity: 1, duration: 1, prevDelta: 1, nextDelta: 1, prevPitchDelta: 1, nextPitchDelta: 1 };
 const event = (pitch) => ({
@@ -77,10 +77,15 @@ describe('music BPE', () => {
     const history = buildBpeHistory([track], 2, weights, 'euclidean', .99);
     const tree = buildHierarchyModel(history, 't');
 
-    expect(tree.maxLevel).toBe(2);
+    expect(tree.maxLevel).toBe(3);
+    expect(tree.maxRank).toBe(2);
     expect(tree.nodes.filter((node) => node.level === 0)).toHaveLength(8);
-    expect(tree.nodes.some((node) => node.level === 2)).toBe(true);
+    expect(tree.nodes.some((node) => node.round === 2 && node.level === 3)).toBe(true);
     expect(tree.edges.every((edge) => tree.nodes.some((node) => node.key === edge.parentKey) && tree.nodes.some((node) => node.key === edge.childKey))).toBe(true);
-    expect(tree.edges.filter((edge) => edge.parentKey.startsWith('2:'))).toHaveLength(4);
+    expect(tree.edges.filter((edge) => edge.parentKey.startsWith('3:'))).toHaveLength(4);
+    const view = buildBpeLayerView(new Map([['t', tree]]), [1, 3]);
+    expect(view.tracks.get('t').nodes.every(({ level }) => [1, 3].includes(level))).toBe(true);
+    expect(view.entries.map(({ level, count }) => [level, count])).toEqual([[3, 2], [1, 4]]);
+    expect(view.tracks.get('t').edges).toHaveLength(4);
   });
 });

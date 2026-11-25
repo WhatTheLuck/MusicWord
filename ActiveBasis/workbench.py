@@ -275,19 +275,26 @@ def continue_playback(request):
 
 def run(request):
     action = request["action"]
-    if action == "annotation-metrics":
+    if action in ("annotation-metrics", "annotation-metrics-series"):
         import numpy as np
         from song_data import METRIC_NAMES, annotation_scores
 
-        tracks = request["tracks"]
-        if not tracks:
-            raise ValueError("没有可对齐的人工标注。")
-        scores = [
-            annotation_scores(track["manualBoxes"], track["predictedBoxes"],
-                              track["manualLabels"], track["predictedLabels"])
-            for track in tracks
-        ]
-        return dict(zip(METRIC_NAMES[:-1], np.mean(scores, axis=0).tolist()))
+        def compare(tracks):
+            if not tracks:
+                raise ValueError("没有可对齐的人工标注。")
+            scores = [
+                annotation_scores(track["manualBoxes"], track["predictedBoxes"],
+                                  track["manualLabels"], track["predictedLabels"])
+                for track in tracks
+            ]
+            return dict(zip(METRIC_NAMES[:-1], np.mean(scores, axis=0).tolist()))
+
+        if action == "annotation-metrics-series":
+            rounds = request["rounds"]
+            if not 1 <= len(rounds) <= 8:
+                raise ValueError("每批指标计算需要 1 到 8 轮数据。")
+            return [compare(tracks) for tracks in rounds]
+        return compare(request["tracks"])
     if action == "catalog":
         return catalog() + [{"id": song["id"], "name": song["name"], "collection": "classical"}
                             for song in classical_catalog()]
