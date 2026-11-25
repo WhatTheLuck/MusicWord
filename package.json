@@ -7,6 +7,6 @@
   "scripts": {
     "prestart": "node setup.mjs",
     "start": "node workspace.mjs",
-    "test": "node --test parameter-preset-store.test.mjs"
+    "test": "node --test parameter-preset-store.test.mjs LEGO/music.test.cjs"
   }
 }

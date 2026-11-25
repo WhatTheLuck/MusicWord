@@ -15,6 +15,7 @@
   --word-soft: #302c46;
   --harmony: #96dfce;
   --harmony-soft: #243733;
+  --harmony-lightness: 78%;
   --roll: #1a1b21;
   --roll-grid: #32343e;
   --roll-bar: #464956;
@@ -40,6 +41,7 @@
   --word-soft: #ebe6fa;
   --harmony: #155b4a;
   --harmony-soft: #e0f1e9;
+  --harmony-lightness: 51%;
   --roll: #eeede6;
   --roll-grid: #d8d5c9;
   --roll-bar: #c6c2b5;
@@ -271,6 +273,12 @@ button.audible[aria-pressed="true"], button.word-card[data-previewing] { border-
   background: var(--word-soft);
 }
 .clip:hover { border-color: var(--word); }
+.clip[data-harmony] {
+  --clip-harmony: oklch(var(--harmony-lightness) 0.14 var(--harmony-hue));
+  border-color: color-mix(in srgb, var(--clip-harmony) 45%, var(--line));
+  background: color-mix(in srgb, var(--clip-harmony) 13%, var(--surface));
+  box-shadow: inset 0 3px var(--clip-harmony);
+}
 .clip[data-selected], .clip[data-resizing] { border-color: var(--accent); background: var(--accent-soft); }
 .clip-body {
   position: absolute;

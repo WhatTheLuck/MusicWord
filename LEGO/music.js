@@ -12,7 +12,6 @@
   };
   const QUALITY_ORDER = ['maj', 'min', 'dim', 'aug', 'dom7', 'maj7', 'min7', 'minmaj7', 'dim7', 'hdim7', 'sus2', 'sus4', '6', 'min6', '9', 'maj9', 'min9'];
   const SOURCE_CHORD = QUALITIES.maj7[1];
-  const MAJOR_SCALE = [0, 2, 4, 5, 7, 9, 11];
   const displayRoot = (root) => root.replace('#', '♯').replace('b', '♭');
   const pitchName = (pitch) => PITCH_NAMES[pitch % 12] + (Math.floor(pitch / 12) - 1);
   const chordName = ({root, quality}) => displayRoot(root) + ({maj: '', min: 'm', dom7: '7', min7: 'm7', min9: 'm9', min6: 'm6'}[quality] ?? quality);
@@ -35,16 +34,28 @@
     });
   }
 
-  function mapPitch(pitch, chord) {
+  function chordPitchMap(chord) {
+    const root = chord[0];
+    return Array.from({length: 12}, (_, pitchClass) => {
+      const position = SOURCE_CHORD.indexOf(pitchClass);
+      if (position >= 0) return chord[Math.min(position, chord.length - 1)];
+
+      // Snap other notes to the closest chord tone across octave boundaries.
+      let nearest = 12;
+      for (const tone of chord) {
+        const shift = (tone - root - pitchClass + 18) % 12 - 6;
+        const distance = Math.abs(shift);
+        if (distance < Math.abs(nearest) || (distance === Math.abs(nearest) && shift < nearest)) {
+          nearest = shift;
+        }
+      }
+      return root + pitchClass + nearest;
+    });
+  }
+
+  function mapPitch(pitch, pitchMap) {
     const pitchClass = ((pitch % 12) + 12) % 12;
-    const position = SOURCE_CHORD.indexOf(pitchClass);
-    // The original remaps chord-tone positions and sends nonchord tones to
-    // the next scale degree by upward pitch-class distance.
-    const distances = MAJOR_SCALE.map((degree) => (degree - pitchClass + 12) % 12);
-    const target = position >= 0
-      ? chord[Math.min(position, chord.length - 1)]
-      : chord[0] + MAJOR_SCALE[distances.indexOf(Math.min(...distances))];
-    let result = target + (Math.floor(pitch / 12) - 5) * 12;
+    let result = pitchMap[pitchClass] + (Math.floor(pitch / 12) - 5) * 12;
     while (result < 0) result += 12;
     while (result > 127) result -= 12;
     return result;
@@ -63,7 +74,6 @@
       first = Math.min(first, start);
       last = Math.max(last, start);
     }
-    const chord = chordNotes(settings);
     const notes = word.notes.map(([onset, duration, pitch, velocity]) => {
       if (settings.flip === 'vertical') pitch = low + high - pitch;
       if (settings.flip === 'diagonal') {
@@ -80,7 +90,10 @@
       const edge = notes.reduce((max, [start, duration]) => Math.max(max, start + duration), 0);
       for (const note of notes) note[0] = edge - note[0] - note[1];
     }
-    if (harmonize) for (const note of notes) note[2] = mapPitch(note[2], chord);
+    if (harmonize) {
+      const pitchMap = chordPitchMap(chordNotes(settings));
+      for (const note of notes) note[2] = mapPitch(note[2], pitchMap);
+    }
     notes.sort((a, b) => a[0] - b[0] || a[2] - b[2]);
     return {notes, period: wordLength(notes) * TICKS};
   }

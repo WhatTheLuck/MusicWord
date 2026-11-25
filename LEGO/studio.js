@@ -644,7 +644,8 @@
     marker.firstElementChild.textContent = '第 ' + (beat + 1) + ' 拍';
   }
 
-  const clipTitle = (clip) => clip.imported?.name ?? ('音词' + clipWord(clip).number + ' x ' + chordName(clip));
+  const clipTitle = (clip) => clip.imported?.name ?? (chordName(clip) + ' · 音词' + clipWord(clip).number);
+  const harmonyKey = (clip) => ROOTS[clip.root] + ':' + clip.quality;
 
   function paintClipFrame(element, {clip, start}) {
     element.style.left = start * beatSize + 2 + 'px';
@@ -670,6 +671,8 @@
       ({clip: clip.start === start ? clip : {...clip, start}, start, end}));
     clips = positions.map(({clip}) => clip);
     total = positions.at(-1)?.end ?? 0;
+    const harmonies = [...new Set(clips.filter((clip) => !clip.imported).map(harmonyKey))].sort();
+    const harmonyHues = new Map(harmonies.map((key, index) => [key, (24 + index * 137.508) % 360]));
     const focused = document.activeElement;
     const focusedClip = focused?.closest('[data-clip]')?.dataset.clip;
     const focusSelector = focused?.dataset.edge ? '[data-edge="' + focused.dataset.edge + '"]' : '.clip-body';
@@ -678,6 +681,10 @@
       const {clip} = position;
       const frame = makeElement('div', undefined, 'clip');
       frame.dataset.clip = clip.id;
+      if (!clip.imported) {
+        frame.dataset.harmony = chordName(clip);
+        frame.style.setProperty('--harmony-hue', harmonyHues.get(harmonyKey(clip)));
+      }
       const button = makeElement('button', undefined, 'clip-body');
       button.type = 'button';
       button.draggable = true;
