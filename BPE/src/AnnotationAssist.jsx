@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { ArrowCounterClockwise, Check, Play, Trash, X } from '@phosphor-icons/react';
 import { DEFAULT_MATCH_PARAMETERS, normalizeMatchParameters } from './annotation-match';
 
-export function AnnotationSimilarity({ template, sourceTracks, annotationTracks, categories, tpb, onAccept, onClose, onPlay, playing, Preview, parameters, setParameters, scope, setScope }) {
+export function AnnotationSimilarity({ template, sourceTracks, annotationTracks, categories, tpb, onAccept, onClose, onLocate, locatedId, onPlay, playing, Preview, parameters, setParameters, scope, setScope }) {
   const [result, setResult] = useState(null);
   const [checked, setChecked] = useState(new Set());
   const [busy, setBusy] = useState(true);
@@ -113,14 +113,20 @@ export function AnnotationSimilarity({ template, sourceTracks, annotationTracks,
       <div className="assist-candidates">
         {result.candidates.map((candidate, index) => {
           const key = `match:${candidate.id}`;
-          return <div className="assist-candidate" key={candidate.id}>
+          const located = candidate.id === locatedId;
+          const locate = () => onLocate(candidate, color);
+          return <div className={`assist-candidate${located ? ' located' : ''}`} key={candidate.id} onClick={(event) => {
+            if (!event.target.closest('button, label')) locate();
+          }}>
             <label className="assist-check"><input type="checkbox" aria-label={`接受候选 ${index + 1}`} checked={checked.has(candidate.id)} onChange={(event) => setChecked((old) => {
               const next = new Set(old); if (event.target.checked) next.add(candidate.id); else next.delete(candidate.id); return next;
             })} /><b>#{index + 1}</b></label>
-            <button className="assist-preview" onClick={() => onPlay(candidate, key)} aria-label={`试听候选 ${index + 1}`}>
+            <button className="assist-preview" onClick={() => { onPlay(candidate, key); locate(); }} aria-label={`试听候选 ${index + 1}`}>
               <Play size={14} weight="fill" /><Preview word={candidate} active={playing?.key === key} progress={playing?.progress} />
             </button>
-            <span>{sourceTracks.find((track) => track.id === candidate.trackId)?.name}<small>第 {(candidate.start / tpb + 1).toFixed(2)}–{(candidate.end / tpb + 1).toFixed(2)} 拍 · {candidate.notes.length} 音符</small></span>
+            <button type="button" className="assist-candidate-location" onClick={locate} aria-current={located || undefined} aria-label={`在钢琴卷帘定位候选 ${index + 1}`}>
+              {sourceTracks.find((track) => track.id === candidate.trackId)?.name}<small>第 {(candidate.start / tpb + 1).toFixed(2)}–{(candidate.end / tpb + 1).toFixed(2)} 拍 · {candidate.notes.length} 音符</small>
+            </button>
             <span className="assist-score">{(candidate.score * 100).toFixed(1)}%<small>移调 {candidate.shift > 0 ? '+' : ''}{candidate.shift} · 时长 ×{candidate.scale.toFixed(2)}</small></span>
           </div>;
         })}

@@ -219,6 +219,9 @@ button:disabled { opacity: .4; cursor: not-allowed; }
 .annotation-roll.read-only { cursor: default; }
 .annotation-note { fill: #74746b; opacity: .82; pointer-events: none; }
 .annotation-note.selected { fill: #fff0c7; opacity: 1; filter: drop-shadow(0 1px 3px rgba(0,0,0,.78)); }
+.annotation-note.matched { fill: var(--match-color, #fff0c7); opacity: 1; }
+.annotation-match { fill: var(--match-color, #fff0c7); fill-opacity: .13; stroke: var(--match-color, #fff0c7); stroke-width: 2; stroke-dasharray: 5 3; vector-effect: non-scaling-stroke; pointer-events: none; }
+.annotation-match:focus { outline: none; }
 .source-word { fill: transparent; stroke: #7b7a70; stroke-width: 1; stroke-dasharray: 4 3; vector-effect: non-scaling-stroke; pointer-events: none; }
 .source-word.selected { fill: var(--accent); fill-opacity: .12; stroke: #fff0c7; stroke-width: 1.8; stroke-dasharray: none; }
 .manual-word { pointer-events: none; }
@@ -346,6 +349,10 @@ button:disabled { opacity: .4; cursor: not-allowed; }
 .assist-status { margin: 0; padding: 16px; color: var(--muted); font-size: 12px; line-height: 1.7; }
 .assist-candidates, .annotation-result-list { max-height: 480px; overflow: auto; scrollbar-color: var(--line) var(--panel); }
 .assist-candidate, .annotation-result-row { display: grid; grid-template-columns: 52px minmax(120px, 200px) minmax(110px, 1fr) auto; align-items: center; gap: 14px; padding: 12px 16px; border-bottom: 1px solid var(--line); font-size: 12px; font-variant-numeric: tabular-nums; }
+.assist-candidate { cursor: pointer; }
+.assist-candidate:hover { background: var(--panel-2); }
+.assist-candidate.located { background: color-mix(in srgb, var(--accent) 12%, var(--panel)); box-shadow: inset 0 0 0 1px var(--accent); }
+.assist-candidate-location { min-width: 0; padding: 6px 0; border: 0; background: none; color: var(--ink); text-align: left; cursor: pointer; }
 .assist-candidate:last-child, .annotation-result-row:last-child { border-bottom: 0; }
 .assist-candidate small, .annotation-result-row small { display: block; margin-top: 6px; color: var(--muted); font-size: 11px; }
 .assist-score { text-align: right; font-weight: 650; }
@@ -356,7 +363,7 @@ button:disabled { opacity: .4; cursor: not-allowed; }
   .assist-template { align-items: stretch; flex-direction: column; gap: 10px; }
   .assist-template > button { flex-basis: auto; }
   .assist-candidate, .annotation-result-row { grid-template-columns: 45px minmax(0, 1fr); gap: 10px; }
-  .assist-candidate > span, .annotation-result-row > span { grid-column: 2; }
+  .assist-candidate > span, .assist-candidate-location, .annotation-result-row > span { grid-column: 2; }
   .assist-score { text-align: left; }
   .assist-row-actions { grid-column: 1 / -1; }
   .annotation-results .assist-toolbar > .assist-field { flex: 1 1 110px; }

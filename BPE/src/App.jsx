@@ -528,7 +528,7 @@ function PianoRoll({ track, sequence, history, tpb, onPlay, playing, selectedWor
   </section>;
 }
 
-function AnnotationPianoRoll({ track, annotation, level, categories, selection, location, onSelectNodes, onSelectNotes, onAggregate, canAggregate, onDelete, onMessage, onPlay, playing, selectedWordId, tpb }) {
+function AnnotationPianoRoll({ track, annotation, level, categories, selection, location, match, onSelectNodes, onSelectNotes, onAggregate, canAggregate, onDelete, onMessage, onPlay, playing, selectedWordId, tpb }) {
   const panelRef = useRef(null);
   const svgRef = useRef(null);
   const scrollRef = useRef(null);
@@ -570,14 +570,27 @@ function AnnotationPianoRoll({ track, annotation, level, categories, selection, 
   const currentVisuals = useMemo(() => layer.segments.map((segment) => ({ segment, box: geometryFor(segment) })).filter((item) => item.box), [layer.segments, geometryFor]);
   const located = location?.level === level ? currentVisuals.find(({ segment }) => segment.id === location.segmentId) : null;
   const focusedTreeKey = located ? `tree:${track.id}:${level}:${located.segment.id}` : null;
+  const matchBox = useMemo(() => {
+    const box = match && geometryFor(match);
+    return box && { ...box, width: Math.min(box.width, width - box.x - 1) };
+  }, [match, geometryFor, width]);
+  const matchedNoteIds = useMemo(() => new Set(match?.noteIds), [match]);
   useLayoutEffect(() => {
-    if (!located) return;
+    const box = matchBox ?? located?.box;
+    if (!box) return;
     const scroller = scrollRef.current;
-    const { x, width } = located.box;
+    const { x, width } = box;
+    if (matchBox) {
+      scroller.scrollLeft = x + width / 2 - scroller.clientWidth / 2;
+      const highlight = svgRef.current.querySelector('.annotation-match');
+      highlight.scrollIntoView({ behavior: 'instant', block: 'center', inline: 'nearest' });
+      highlight.focus({ preventScroll: true });
+      return;
+    }
     panelRef.current.scrollIntoView({ behavior: 'instant', block: 'start', inline: 'nearest' });
     scroller.scrollLeft = x + width / 2 - scroller.clientWidth / 2;
     scroller.querySelector('.word-tree .tree-node.focused')?.focus({ preventScroll: true });
-  }, [located, location]);
+  }, [located, location, matchBox]);
   const selectedIds = selection?.trackId === track.id ? new Set(selection.noteIds) : new Set();
   const selectedSourceIds = selection?.trackId === track.id ? new Set(selection.sourceSegmentIds) : new Set();
   const pointFromEvent = (event) => {
@@ -626,6 +639,7 @@ function AnnotationPianoRoll({ track, annotation, level, categories, selection, 
       <svg
         ref={svgRef}
         className={`piano-roll annotation-roll ${canSelectNotes ? '' : 'read-only'}`}
+        style={match?.color ? { '--match-color': match.color } : undefined}
         width={width}
         height={height}
         role="application"
@@ -642,7 +656,7 @@ function AnnotationPianoRoll({ track, annotation, level, categories, selection, 
       >
         <rect width={width} height={height} fill="var(--roll-bg)" />
         {Array.from({ length: Math.ceil(endTick / tpb) + 1 }, (_, index) => <line key={index} x1={x(index * tpb)} x2={x(index * tpb)} y1="0" y2={height} className={index % 4 === 0 ? 'bar-line' : 'beat-line'} />)}
-        {notes.map((note) => <rect key={note.id} className={selectedIds.has(note.id) ? 'annotation-note selected' : 'annotation-note'} x={x(note.onset)} y={y(note.pitch)} width={Math.max(2, x(note.duration))} height="7" rx="1.5" />)}
+        {notes.map((note) => <rect key={note.id} className={`annotation-note${selectedIds.has(note.id) ? ' selected' : ''}${matchedNoteIds.has(note.id) ? ' matched' : ''}`} x={x(note.onset)} y={y(note.pitch)} width={Math.max(2, x(note.duration))} height="7" rx="1.5" />)}
         {canSelectNotes && sourceVisuals.map(({ segment, box }) => <rect key={segment.id} className={selectedSourceIds.has(segment.id) ? 'source-word selected' : 'source-word'} {...box} rx="3" />)}
         {currentVisuals.map(({ segment, box }) => {
           const category = categoryById.get(segment.categoryId);
@@ -656,6 +670,7 @@ function AnnotationPianoRoll({ track, annotation, level, categories, selection, 
             {box.width >= 42 && <text x={box.x + 5} y={box.y + 11}>{category?.label ?? (segment.categoryId === 'SONG' ? '整首' : '音符')}</text>}
           </g>;
         })}
+        {matchBox && <rect className="annotation-match" {...matchBox} rx="4" tabIndex={-1} role="img" aria-label={`匹配片段，${matchedNoteIds.size} 个音符`} />}
         {drag?.current && <rect className="selection-marquee" x={Math.min(drag.x, drag.current.x)} y={Math.min(drag.y, drag.current.y)} width={Math.abs(drag.current.x - drag.x)} height={Math.abs(drag.current.y - drag.y)} />}
       </svg>
     </div>
@@ -856,6 +871,7 @@ export default function App() {
   const [annotationHistory, setAnnotationHistory] = useState([]);
   const lastAnnotation = annotationHistory.at(-1);
   const [searchTemplate, setSearchTemplate] = useState(null);
+  const [matchLocation, setMatchLocation] = useState(null);
   const [editingAnnotation, setEditingAnnotation] = useState(null);
   const [playSelectionOnSelect, setPlaySelectionOnSelect] = useState(true);
   const [matchParameters, setMatchParameters] = useState(DEFAULT_MATCH_PARAMETERS);
@@ -1012,6 +1028,9 @@ export default function App() {
   }, [midi, algorithmTrackIds, tpb, saturation, comparing, referenceByTrack, shared]);
   const annotationSourceTracks = useMemo(() => midi?.tracks.filter((track) => editorTrackIds.includes(track.id))
     .map((track) => prepareAnnotationTrack(track, annotationTpb / midi.sourcePpq)) ?? [], [midi, editorTrackIds]);
+  useEffect(() => {
+    setMatchLocation(null);
+  }, [searchTemplate, annotationSourceTracks, annotationTracks, matchParameters, matchScope, mode]);
 
   useEffect(() => {
     if (mode !== 'algorithm') return;
@@ -1248,6 +1267,7 @@ export default function App() {
   const clearAnnotationSelection = () => {
     setAnnotationSelection(null);
     setAnnotationLocation(null);
+    setMatchLocation(null);
     setAnnotationCategory(null);
     setAnnotationMessage('');
   };
@@ -1263,6 +1283,10 @@ export default function App() {
     setSearchTemplate({ notes: word.notes, trackId, segmentId: word.instanceId, level: word.level, categoryId: word.id });
     setEditingAnnotation(null);
     clearAnnotationSelection();
+  };
+  const locateMatch = (candidate, color) => {
+    setAnnotationLocation(null);
+    setMatchLocation({ ...candidate, color });
   };
   const acceptSimilarSegments = (candidates, template, parameters) => {
     const result = acceptAnnotationMatches(annotationTracks, template.level, candidates, template.categoryId, template, parameters);
@@ -1307,6 +1331,7 @@ export default function App() {
     if (!layer) return;
 
     setAnnotationLocation(null);
+    setMatchLocation(null);
     setAnnotationLevel(kind === 'tree' ? level : 1);
     const sameLayer = annotationSelection?.trackId === trackId && annotationSelection.level === level && annotationSelection.kind === kind;
     const nextIds = new Set(toggle && sameLayer ? annotationSelection.sourceSegmentIds : []);
@@ -1378,7 +1403,7 @@ export default function App() {
         return;
       }
       if (event.ctrlKey || event.altKey || event.metaKey) return;
-      if (event.key === 'Escape' && (annotationSelection || annotationLocation)) {
+      if (event.key === 'Escape' && (annotationSelection || annotationLocation || matchLocation)) {
         event.preventDefault();
         clearAnnotationSelection();
         return;
@@ -1398,7 +1423,7 @@ export default function App() {
     };
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [canAggregate, annotationCategories, annotationCategory, annotationSelection, annotationLocation, annotationTracks, annotationLevel, editingAnnotation, lastAnnotation, mode]);
+  }, [canAggregate, annotationCategories, annotationCategory, annotationSelection, annotationLocation, matchLocation, annotationTracks, annotationLevel, editingAnnotation, lastAnnotation, mode]);
   const saveAnnotations = async (download = false) => {
     setSavingAnnotation(true);
     setSaveMessage('');
@@ -1627,7 +1652,9 @@ export default function App() {
         {mode === 'annotation' && !loading && !error && annotationTracks.length > 0 && <>
           {annotationSourceTracks.map((track) => {
             const annotation = annotationTracks.find((item) => item.trackId === track.id);
-            return annotation?.layers[annotationLevel] && <AnnotationPianoRoll key={track.id} track={track} annotation={annotation} level={annotationLevel}
+            const match = searchTemplate && matchLocation?.trackId === track.id ? matchLocation : null;
+            const level = match && !annotation?.layers[annotationLevel] ? 0 : annotationLevel;
+            return annotation?.layers[level] && <AnnotationPianoRoll key={track.id} track={track} annotation={annotation} level={level} match={match}
               categories={annotationCategories} selection={annotationSelection} location={annotationLocation?.trackId === track.id ? annotationLocation : null} onSelectNodes={selectAnnotationNodes}
               onSelectNotes={(trackId, ids, toggle, audition) => selectAnnotationNodes(trackId, 0, ids, toggle, 'roll', audition)}
               onAggregate={confirmAnnotation} canAggregate={canAggregate} onMessage={setAnnotationMessage}
@@ -1645,7 +1672,7 @@ export default function App() {
           {searchTemplate && <AnnotationSimilarity template={searchTemplate} sourceTracks={annotationSourceTracks} annotationTracks={annotationTracks}
             parameters={matchParameters} setParameters={setMatchParameters} scope={matchScope} setScope={setMatchScope}
             categories={annotationCategories} tpb={annotationTpb} onAccept={acceptSimilarSegments} onClose={() => setSearchTemplate(null)}
-            onPlay={playAnnotationWord} playing={playing} Preview={WordPianoRoll} />}
+            onLocate={locateMatch} locatedId={matchLocation?.id} onPlay={playAnnotationWord} playing={playing} Preview={WordPianoRoll} />}
           <AnnotationResults key={`${midi?.sourceId}:${annotationLevel}`} level={annotationLevel} sequences={managedAnnotationView.sequences}
             categories={annotationCategories} trackNames={trackNames} onDelete={deleteManagedAnnotations} onReclassify={reclassifyAnnotations}
             onLocate={locateAnnotation} location={annotationLocation}

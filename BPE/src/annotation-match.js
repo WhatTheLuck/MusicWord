@@ -1,5 +1,5 @@
 export const DEFAULT_MATCH_PARAMETERS = {
-  threshold: 85, onsetTolerance: 0.125, durationTolerance: 35,
+  threshold: 85, onsetTolerance: 0.3, durationTolerance: 80,
   transpose: 0, tempoTolerance: 10, maxResults: 100, skipAnnotated: true,
 };
 
