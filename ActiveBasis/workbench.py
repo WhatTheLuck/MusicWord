@@ -100,15 +100,6 @@ def configuration(settings):
     from active_basis import LearningConfig
 
     defaults = LearningConfig()
-    raw_scales = settings.get("scales")
-    try:
-        pitch_scales = defaults.pitch_scales if raw_scales is None else tuple(dict.fromkeys(
-            float(value) for value in re.split(r"[,，\s]+", str(raw_scales).strip())
-        ))
-    except ValueError:
-        pitch_scales = ()
-    if not 1 <= len(pitch_scales) <= 7 or not all(0.25 <= scale <= 3 for scale in pitch_scales):
-        raise ValueError("请输入 1–7 个音高缩放倍率，每个倍率为 0.25–3")
     note_min = bounded(settings, "noteMin", defaults.initial_note_count[0], 1, 20)
     note_max = bounded(settings, "noteMax", defaults.initial_note_count[1] - 1, note_min, 20)
     duration_min = bounded(settings, "durationMin", defaults.initial_duration[0], 0, 96)
@@ -127,7 +118,6 @@ def configuration(settings):
                        bounded(settings, "width", defaults.initial_shape[1], 2, 96)),
         initial_note_count=(note_min, note_max + 1),
         initial_duration=(duration_min, duration_max + 1),
-        pitch_scales=pitch_scales,
         blur_size=blur_size,
         random_sigma=sigma,
         learned_sigma=bounded(settings, "learnedSigma", shared_sigma or defaults.learned_sigma, 0.1, 5, float),
@@ -172,12 +162,16 @@ def restore_random(state, rng):
     rng.set_state(("MT19937", np.asarray(keys, dtype=np.uint32), position, has_gauss, gauss))
 
 
-def restore_dictionary(slots, rolls, config):
+def restore_dictionary(slots, rolls, config, *, legacy_pitch_scales=()):
     from active_basis import Basis, Template, render_notes
 
     height = max(roll.shape[0] for roll in rolls)
     width = max(roll.shape[1] for roll in rolls)
-    max_pitch = round((height - 1) / min(config.pitch_scales))
+    max_pitch = height - 1
+    if legacy_pitch_scales:
+        max_pitch = round(max_pitch / min(1, *legacy_pitch_scales))
+    # Undoing onset spacing and duration can each contribute up to twice the crop width.
+    max_extent = 4 * width
     dictionary = []
     for slot in slots:
         if slot is None:
@@ -185,8 +179,8 @@ def restore_dictionary(slots, rolls, config):
             continue
         notes = [Basis(*note) for note in slot]
         if not config.minimum_learned_notes <= len(notes) <= config.maximum_learned_notes or any(
-            not (0 <= note.pitch <= max_pitch and 0 <= note.tick < width
-                 and 0 <= note.duration < width and note.tick + note.duration < width)
+            not (0 <= note.pitch <= max_pitch and 0 <= note.tick and 0 <= note.duration
+                 and note.tick + note.duration <= max_extent)
             for note in notes
         ):
             raise ValueError("续训的字典状态无效。")
@@ -239,7 +233,9 @@ def continue_playback(request):
     from song_data import average_iou
 
     seed = bounded(request, "seed", 37, 0, 2**32 - 1)
-    config = LearningConfig(**request["config"])
+    parameters = dict(request["config"])
+    legacy_pitch_scales = parameters.pop("pitch_scales", ())
+    config = LearningConfig(**parameters)
     songs = request["songs"]
     rolls = [unpack_playback_roll(song["roll"]) for song in songs]
     rng = np.random.RandomState(seed)
@@ -259,7 +255,7 @@ def continue_playback(request):
         if expected and actual != expected:
             raise ValueError("无法恢复此回放的随机状态。")
         slots = playback_slots(request["dictionary"])
-    dictionary = restore_dictionary(slots, rolls, config)
+    dictionary = restore_dictionary(slots, rolls, config, legacy_pitch_scales=legacy_pitch_scales)
     recorder = PlaybackRecorder(None, None, seed, None, config, rounds_only=True)
     dictionary, matches, reconstructions = train_round(dictionary, rolls, config, rng, recorder)
     metrics = {
@@ -326,7 +322,7 @@ def run(request):
     config = configuration(settings)
     track = int(request["track"])
     resolution = bounded(settings, "resolution", TICKS_PER_BEAT, 4, 96)
-    candidate_height = round((config.initial_shape[0] - 1) * max(config.pitch_scales)) + config.blur_size
+    candidate_height = config.initial_shape[0] + config.blur_size - 1
     minimum_pitch_range = bounded(settings, "minPitchRange", candidate_height, 0, 128)
     annotation_range = request.get("annotationRange")
     if annotation_range is not None and (

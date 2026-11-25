@@ -73,7 +73,7 @@ def plot_metrics(history, names):
 def run(args):
     import numpy as np
 
-    from active_basis import LearningConfig, encode, prepare_dictionary, relearn
+    from active_basis import DURATION_FACTORS, FLIPS, ONSET_FACTORS, LearningConfig, encode, prepare_dictionary, relearn
     from song_data import METRIC_NAMES, MINIMUM_PITCH_RANGE, TICKS_PER_BEAT, evaluate, load_song
 
     config = LearningConfig()
@@ -92,7 +92,7 @@ def run(args):
     output = create_run_directory(args.output_dir.expanduser().resolve())
     parameters = vars(args) | {
         "pop909_dir": pop909, "label_dir": labels.parent, "ticks_per_beat": TICKS_PER_BEAT,
-    } | asdict(config)
+    } | asdict(config) | {"F": FLIPS, "D": DURATION_FACTORS, "A": ONSET_FACTORS}
     with (output / "Parameters.csv").open("w", encoding="utf-8", newline="") as stream:
         writer = csv.writer(stream)
         writer.writerow(("Variable", "Value"))

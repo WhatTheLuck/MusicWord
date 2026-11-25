@@ -404,11 +404,16 @@ const songAxes = (song) => ({
   axes: true, pitchOrigin: song.pitchOrigin, tickOffset: song.tickOrigin - song.timePad,
 });
 const matchBox = (box) => ({ box, color: colors.match, lineWidth: 1.8 });
-const variantName = (item) => `${templateName(item.template)} · ${item.scale}×`;
-const originalParameters = "F=0 D=0 A=0";
-const variantParameters = "F=0 D=1 A=1";
-const variantParameterGuide = "原体用 0 标记未施加的变换。变体中的 F 表示翻转，D 是时值倍率，A 是音符起点间距倍率。";
-const pitchMultiplier = (scale) => `音高 ${scale}×`;
+const variantTransform = (item) => item.transform ?? item.scale;
+const variantKey = (word, transform) => [word, transform].join("/");
+const itemKey = (item) => variantKey(item.template, variantTransform(item));
+const originalTransform = [0, 1, 1];
+const flipLabels = ["原方向", "左右翻转", "上下翻转", "上下左右翻转"];
+const variantLabel = (transform) => Array.isArray(transform)
+  ? `F=${transform[0]} D=${transform[1]} A=${transform[2]}`
+  : `旧版 · 音高 ${transform}×`;
+const variantCaption = (transform) => Array.isArray(transform) ? flipLabels[transform[0]] : "旧版变体";
+const variantParameterGuide = "F 翻转（0 原方向、1 左右、2 上下、3 上下左右），D 缩放音符持续时间（0.5、1、1.5），A 缩放音符起点的间距（0.5、1、2）。";
 let inputPreview = null;
 let selectedVariant = null;
 let similarityExamples = [];
@@ -622,11 +627,14 @@ function viewResponseDictionary(view, round) {
     row.setAttribute("aria-label", name);
     const original = figure(`${name} · 原体`, packet, { height: 58, wordDomain });
     original.classList.add("response-original");
-    original.lastElementChild.append(element("span", "variant-parameters", originalParameters));
+    if (variants.some(({ item }) => item.transform)) {
+      original.lastElementChild.append(element("span", "variant-parameters", variantLabel(originalTransform)));
+    }
     const strip = element("div", "response-word-strip");
     for (const { index, item } of variants) {
-      const choice = responseChoice(pitchMultiplier(item.scale), displayedVariant(item), variantParameters,
-        { height: 58, wordDomain });
+      const transform = variantTransform(item);
+      const choice = responseChoice(variantCaption(transform), displayedVariant(item), variantLabel(transform),
+        { height: 58, wordDomain, previewSource: matrix(item.matrix) });
       choice.disabled = !item.responses[state.song];
       choice.dataset.variant = index;
       choice.setAttribute("aria-pressed", String(index === selectedVariant));
@@ -651,24 +659,26 @@ function responseChoice(text, packet, parameters, options) {
 
 function viewDictionary(view, round) {
   const config = data.config;
-  const scales = config?.pitch_scales ?? [...new Set(round.variants.map((item) => item.scale))];
-  if (scales.length) view.append(facts([
-    ["变体音高倍率", `${Math.min(...scales)}–${Math.max(...scales)}×`],
-    ["离散倍率", scales.map((scale) => `${scale}×`).join("、")],
-    ["原型初始形状", config?.initial_shape.join(" × ") ?? "见参数文件"],
-  ]), element("p", "helper variant-guide", variantParameterGuide));
+  const legacy = round.variants.some((item) => !item.transform);
+  if (config?.initial_shape) view.append(facts([["原型初始形状", config.initial_shape.join(" × ")]]));
+  view.append(element("p", "helper variant-guide", legacy
+    ? "这是旧版训练回放。开始新训练或追加一轮即可查看 F、D、A 变体。"
+    : variantParameterGuide));
   const grid = element("div", "dictionary-grid");
   const wordDomain = wordDimensions([...round.dictionary, ...round.variants.map(displayedVariant)]);
   round.dictionary.forEach((packet, index) => {
     const details = element("details", "word");
     const summary = element("summary", "");
-    summary.append(figure(templateName(index), packet, { height: 62, wordDomain, pointerOnly: true }, packet ? originalParameters : ""));
+    summary.append(figure(templateName(index), packet, { height: 62, wordDomain, pointerOnly: true },
+      packet && !legacy ? variantLabel(originalTransform) : ""));
     const variants = element("div", "word-variants");
     round.variants.forEach((item, id) => {
       if (item.template !== index) return;
       const button = element("button", "variant-choice");
       button.type = "button";
-      button.append(figure(pitchMultiplier(item.scale), displayedVariant(item), { height: 54, wordDomain, pointerOnly: true }, variantParameters));
+      const transform = variantTransform(item);
+      button.append(figure(variantCaption(transform), displayedVariant(item),
+        { height: 54, wordDomain, pointerOnly: true, previewSource: matrix(item.matrix) }, variantLabel(transform)));
       button.disabled = !item.responses[state.song];
       button.addEventListener("click", () => chooseVariant(id, true));
       variants.append(button);
@@ -796,10 +806,11 @@ function viewSimilarity(view) {
     const noteCount = (count) => count == null ? "" : `${count} 个音符`;
     const result = example.scores?.[metric] ?? example;
     const kernel = showBlur() && result.matchKernel;
+    const variant = result.matchMatrix ?? example.left;
     plots.append(
-      figure(kernel ? "单词匹配核" : "单词", kernel || example.left,
-        { ...axes, previewSource: matrix(example.left), blur: kernel ? null : example.wordBlur ?? blurSettings() }, noteCount(example.wordNotes)),
-      figure("乐谱片段", example.right, axes, noteCount(example.targetNotes)),
+      figure(kernel ? "单词匹配核" : "最佳单词变体", kernel || variant,
+        { ...axes, previewSource: matrix(variant), blur: kernel ? null : example.wordBlur ?? blurSettings() }, noteCount(example.wordNotes)),
+      figure("乐谱片段", example.right, { ...axes, blur: example.wordBlur ?? blurSettings() }, noteCount(example.targetNotes)),
     );
     const map = result.responseMap;
     if (map) {
@@ -807,7 +818,7 @@ function viewSimilarity(view) {
       const rmse = result.rmse == null ? "" : ` · RMSE ${number(result.rmse)}`;
       const ideal = idealSimilarities.get(example.label);
       const expectation = ideal ? ` · 理想相似度：${ideal}` : "";
-      const peak = `峰值 ${number(result.response)}${rmse}${expectation} · ${pitchMultiplier(result.scale)} · 音高 ${pitch + map.origin} 半音，时间 ${tick + map.origin} tick`;
+      const peak = `峰值 ${number(result.response)}${rmse}${expectation} · ${variantLabel(variantTransform(result))} · 音高 ${pitch + map.origin} 半音，时间 ${tick + map.origin} tick`;
       const chart = element("div", "similarity-response");
       chart.append(figure("匹配响应图", map.matrix, {
         ...axes, heat: true, heatBounds, pitchOrigin: map.origin, tickOffset: map.origin,
@@ -844,8 +855,8 @@ function viewVariant(view, round, song, panel) {
   const dictionary = panel.parts.responseDictionary;
   const dialog = panel.parts.responseDialog;
   const toggle = item
-    ? responseChoice(`${templateName(item.template)} · ${pitchMultiplier(item.scale)}`,
-      displayedVariant(item), variantParameters, { height: 206, axes: true })
+    ? responseChoice(`${templateName(item.template)} · ${variantCaption(variantTransform(item))}`,
+      displayedVariant(item), variantLabel(variantTransform(item)), { height: 206, axes: true, previewSource: matrix(item.matrix) })
     : button("", "action-button");
   toggle.classList.add("response-preview");
   toggle.append(element("span", "response-toggle-label", "展开词典"));
@@ -893,16 +904,21 @@ function encodedThrough(round, song, events, last, includeResidual = false) {
     cache = {
       last: -1, values: new Float32Array(source.values.length),
       subtracted: includeResidual ? new Float32Array(source.values.length) : null,
-      variants: new Map(round.variants.map((item) => [variantName(item), item])),
+      variants: new Map(round.variants.map((item) => [itemKey(item), item])),
     };
     reconstructionCache.set(events, cache);
   }
   while (cache.last < last) {
     const event = events[++cache.last];
-    const variant = cache.variants.get(variantName(event));
+    const variant = cache.variants.get(itemKey(event));
     const [tick, pitch] = event.box;
     accumulate(cache.values, matrix(variant.matrix), [tick, pitch, source.width]);
     if (cache.subtracted) accumulate(cache.subtracted, matrix(variant.blurred), [tick, pitch, source.width]);
+    cache.residual = null;
+  }
+  if (cache.subtracted && !cache.residual) {
+    cache.residual = { ...source, values: Float32Array.from(source.values,
+      (value, index) => Math.max(0, value - cache.subtracted[index])) };
   }
   return cache;
 }
@@ -928,15 +944,18 @@ function rankingList(ranking, variants, event, [low, high]) {
   const width = high - low || 1;
   const zero = (0 - low) * 100 / width;
   list.style.setProperty("--ranking-zero", `${zero}%`);
-  for (const [word, scale, score] of ranking) {
-    const isWinner = event?.template === word && event?.scale === scale;
+  const winningKey = event && itemKey(event);
+  for (const [word, transform, score] of ranking) {
+    const key = variantKey(word, transform);
+    const isWinner = key === winningKey;
     const row = element("li", isWinner ? "winner" : "");
     if (isWinner) row.setAttribute("aria-current", "true");
-    const title = `${templateName(word)} · ${pitchMultiplier(scale)}`;
+    const title = `${templateName(word)} · ${variantLabel(transform)}`;
     const entry = element("div", "ranking-entry");
     const thumbnail = element("div", "ranking-thumbnail");
-    const packet = displayedVariant(variants.get(variantName({ template: word, scale })));
-    thumbnail.append(packet ? plot(`${title}的音形`, matrix(packet), { height: 44 }) : "音形缺失");
+    const variant = variants.get(key);
+    thumbnail.append(variant ? plot(`${title}的音形`, matrix(displayedVariant(variant)),
+      { height: 44, previewSource: matrix(variant.matrix) }) : "音形缺失");
     const track = element("span", "ranking-bar");
     track.setAttribute("aria-hidden", "true");
     const fill = element("span", score < 0 ? "negative" : "");
@@ -1062,7 +1081,8 @@ function matchDictionary(round, currentWord) {
     const name = templateName(word);
     const item = element("li", "encoding-dictionary-word");
     if (word === currentWord) item.setAttribute("aria-current", "true");
-    const thumbnail = plot(`${name} 原体`, matrix(packet), { height: 22 });
+    const learned = round.trials.some((trial) => trial.template === word && trial.accepted && trial.learned);
+    const thumbnail = plot(`${name} 原体`, matrix(packet), { height: 22, blur: blurSettings(learned ? "learned" : "random") });
     item.append(thumbnail, element("span", "", name));
     list.append(item);
   });
@@ -1072,6 +1092,8 @@ function matchDictionary(round, currentWord) {
 
 function viewMatch(view, round, song, panel) {
   const source = matrix(song.roll);
+  const blurred = showBlur();
+  const blur = blurSettings();
   const events = panel.matches;
   const last = panel.step - 1;
   const event = events[last];
@@ -1090,37 +1112,39 @@ function viewMatch(view, round, song, panel) {
     });
   }
   const encoded = encodedThrough(round, song, events, last, true);
-  const residual = Float32Array.from(source.values, (value, index) => Math.max(0, value - encoded.subtracted[index]));
   const axes = songAxes(song);
   const ranking = element("aside", "ranking-panel");
   const rankingHeading = element("div", "ranking-heading");
   rankingHeading.append(element("h3", "", "变体响应排名"));
-  const entries = event ? (event.ranking ?? [[event.template, event.scale, event.score]]) : panel.initialRanking;
+  const entries = event ? (event.ranking ?? [[event.template, variantTransform(event), event.score]]) : panel.initialRanking;
   if (entries.length) {
     const [low, high] = panel.responseRange;
-    const parameters = element("span", "ranking-scale", variantParameters);
-    parameters.title = variantParameterGuide;
-    rankingHeading.append(element("span", "ranking-scale", `${number(low)} 至 ${number(high)}`), parameters);
+    rankingHeading.append(element("span", "ranking-scale", `${number(low)} 至 ${number(high)}`));
+    if (entries.some(([, transform]) => Array.isArray(transform))) rankingHeading.title = variantParameterGuide;
   }
   ranking.append(rankingHeading);
   if (event && !event.ranking) ranking.append(element("p", "helper", "这份回放仅记录了胜出变体的分值。"));
   ranking.append(entries.length ? rankingList(entries, encoded.variants, event, panel.responseRange)
     : element("p", "helper", "没有可匹配的变体。"));
-  const rows = [["原始 MIDI", source, { boxes: originalBoxes }]];
+  const rows = [[blurred ? "原谱模糊" : "原始 MIDI", source, { boxes: originalBoxes, blur }]];
   if (event) {
     const [tick, pitch] = event.box;
     rows.push(["本步响应", source, {
       boxes: [matchBox([tick, pitch, tick + 1, pitch + 1])],
       response: { source: matrix(event.before), stride: 1, offset: event.start },
+      blur,
     }]);
   }
-  rows.push(["残差 MIDI", { ...source, values: residual }, { boxes }]);
-  const variant = event && encoded.variants.get(variantName(event));
+  rows.push([blurred ? "残差模糊" : "残差 MIDI", encoded.residual, { boxes, blur }]);
+  const variant = event && encoded.variants.get(itemKey(event));
   const rawBox = variant && [event.box[0], event.box[1], event.box[0] + matrix(variant.matrix).width,
     event.box[1] + matrix(variant.matrix).height];
-  rows.push(["重构 MIDI", { ...source, values: encoded.values }, { boxes: rawBox ? [matchBox(rawBox)] : [] }]);
+  const reconstruction = { ...source, values: encoded.values };
+  rows.push([blurred ? "模糊重构" : "重构 MIDI",
+    blurred ? { ...source, values: encoded.subtracted } : reconstruction,
+    { boxes: blurred ? boxes : rawBox ? [matchBox(rawBox)] : [], previewSource: reconstruction }]);
 
-  const legends = [["", "音符"], ["match", "本步命中"]];
+  const legends = [["", blurred ? "卷帘强度" : "音符"], ["match", "本步命中"]];
   if (originalBoxes.length > boxes.length) legends.push(["capture", "裁切范围"]);
   const full = plotSection("全曲对齐卷帘", legends);
   const detail = plotSection("局部放大");
@@ -1152,8 +1176,8 @@ function viewMatch(view, round, song, panel) {
     stageValue(view, number(event.score), "本步匹配");
     const word = element("div", "encoding-step-word");
     word.append(element("h3", "subheading", "本步使用的单词"),
-      figure(`${templateName(event.template)} · ${pitchMultiplier(event.scale)}`,
-        displayedVariant(variant), { height: 22 }));
+      figure(`${templateName(event.template)} · ${variantLabel(variantTransform(event))}`,
+        displayedVariant(variant), { height: 22, previewSource: matrix(variant.matrix) }));
     words.append(word);
     summary.append(facts([
       ["原谱位置", `第 ${event.box[0] + axes.tickOffset} tick · MIDI ${event.box[1] + song.pitchOrigin}`],
@@ -1170,6 +1194,7 @@ function viewMatch(view, round, song, panel) {
   const dashboard = element("div", "encoding-dashboard");
   dashboard.append(charts, side);
   view.append(words, dashboard, summary);
+  if (blurred) view.append(element("p", "helper", "原谱和残差显示高斯模糊预览，底行叠加各步实际使用的匹配核。"));
   if (clipped) view.append(element("p", "helper", "点击或拖动全曲原谱上的窗口，可移动局部放大位置。"));
 }
 
@@ -1449,7 +1474,7 @@ function iterationState(round, index, song, wordDomain) {
   const { values, variants } = encodedThrough(round, song, events, events.length - 1);
   const results = events.map(event => {
     const [left, low] = event.box;
-    const { width, height } = matrix(variants.get(variantName(event)).matrix);
+    const { width, height } = matrix(variants.get(itemKey(event)).matrix);
     return { ...matchBox([left, low, left + width, low + height]), lineWidth: 1 };
   });
   const axes = { ...songAxes(song), height: 128 };
@@ -1952,7 +1977,7 @@ function changeRun(key, value, preservePosition = false) {
       panel.matches = panel.items.slice(1);
       panel.initialRanking = round?.variants.flatMap((item) => {
         const response = item.responses[state.song];
-        return response ? [[item.template, item.scale, response.peak]] : [];
+        return response ? [[item.template, variantTransform(item), response.peak]] : [];
       }).sort((a, b) => b[2] - a[2]) ?? [];
       panel.responseRange = rankingRange(panel.initialRanking, panel.matches);
     }
@@ -2010,8 +2035,8 @@ let sourceReady = false;
 let live = false;
 let parametersEdited = false;
 const emptyData = { rounds: [], songs: [], metrics: [] };
-const previewKeys = ["resolution", "height", "scales", "blur", "sigma"];
-const exampleKeys = ["blur", "sigma", "scales"];
+const previewKeys = ["resolution", "height", "blur", "sigma"];
+const exampleKeys = ["blur", "sigma"];
 const previewJob = { run: updatePreview, timer: null, request: null };
 const exampleJob = { run: computeExamples, timer: null, request: null };
 const trainingJob = { run: runTraining, timer: null, request: null };
@@ -2036,29 +2061,23 @@ function button(text, className = "action-button") {
 }
 
 function parameterInput(key, value, min, max, step = 1, id = key) {
-  const input = element("input", "");
+  const input = element("input", "parameter-input");
   input.id = id;
   input.name = key;
   input.value = value;
   input.setAttribute("form", form.id);
-  if (min !== undefined) {
-    input.type = "number";
-    input.min = min;
-    if (max !== undefined) input.max = max;
-    input.step = step;
-  } else {
-    input.type = "text";
-    input.className = "scale-input";
-  }
+  input.type = "number";
+  input.min = min;
+  if (max !== undefined) input.max = max;
+  input.step = step;
   input.required = true;
-  input.classList.add("parameter-input");
   return input;
 }
 
 function parameter(key, label, description, value, min, max, step = 1, id = key) {
   const input = parameterInput(key, value, min, max, step, id);
   const wrapper = field(label, input, description);
-  if (input.type !== "number" || !input.max || key === "seed") return wrapper;
+  if (!input.max || key === "seed") return wrapper;
 
   const slider = element("input", "parameter-slider");
   slider.type = "range";
@@ -2191,7 +2210,6 @@ function launchControls() {
   byStage("input").parts.controls.append(parameterPanel("输入与量化", sourceRow), inputAnnotationRow, status, provenance);
   parameterGroup("trials", "候选生成与变体",
     parameter("words", "初始单词数", "首轮预留的字典槽位。调大可容纳更多单词，也会增加候选筛选和匹配开销。", 4, 1, 12),
-    parameter("scales", "音高缩放倍率", "用逗号分隔倍率。1 保留原音程，小于 1 压缩间距，大于 1 拉开间距。每个倍率都参与匹配。", "1, 0.8, 1.2"),
     parameter("seed", "随机种子", "决定随机候选的生成序列。相同输入和参数下，固定种子可复现结果，换值可尝试另一组候选。", 37, 0, 4294967295),
     pairedParameter("初始单词形状", "随机候选的音高跨度与音符起点采样范围。",
       [["height", "音高（半音）", 10, 2, 32], ["width", "时间（格）", 20, 2, 96]]),
@@ -2311,7 +2329,7 @@ for r = 1 to {{rounds}}:  # 初始训练轮数
     D, V ← 初始化字典(D, M, rng)
     匹配, 重构 ← 拼图编码(M, V)
     指标 ← 评估(M, 匹配, 重构)
-    片段集 ← 裁切并逆缩放(M, 匹配)
+    片段集 ← 裁切并逆变换(M, 匹配)
     D ← 字典重学习(片段集)
 return D, 匹配, 重构, 指标`],
   input: ["乐谱量化", "输入：所选乐谱与音轨；输出：训练矩阵 M。", `notes ← 读取乐谱(当前曲目, 当前音轨)
@@ -2331,11 +2349,11 @@ for 槽位 in D:
         T ← 随机采样基元(候选形状, 基元数范围, 时长采样范围)
         T ← 起点、音高和时长分别减去各自最小值(T)
         if 最大去重 ZNCC(T, D) > {{similarity-limit}}: continue
-        V_T ← 音高缩放变体(T, 倍率 = {{scales}})
+        V_T ← 枚举变体(T, F = [0, 1, 2, 3], D = [0.5, 1, 1.5], A = [0.5, 1, 2])
         if 最高匹配响应(V_T, M) ≥ {{usefulness}}:
             D[槽位] ← T; 接纳 V_T; break
-return D, V  # 已有单词同样按所设倍率生成变体`],
-  variants: ["相似度量", "输入：单词变体 T、乐谱 M；输出：各位置的匹配响应 R。", `for T in 字典的音高缩放变体:
+return D, V  # 已有单词也枚举同样的变体`],
+  variants: ["相似度量", "输入：单词变体 T、乐谱 M；输出：各位置的匹配响应 R。", `for T in 字典的 F、D、A 变体:
     σ ← {{sigma}}  # 随机单词
     if T 来自重学习: σ ← {{sigma:learned}}
     B ← 高斯模糊(T, 核边长 = {{blur}}, σ)
@@ -2346,10 +2364,10 @@ return D, V  # 已有单词同样按所设倍率生成变体`],
 return R  # 编码使用此响应；下方样例可比较其他指标`],
   similarity: ["匹配样例", "输入：样例单词、乐谱片段；输出：所选指标的响应图。", `指标 ← {{similarity-metric}}
 M_G ← 高斯模糊(乐谱片段, {{blur}}, {{sigma}})
-for 倍率 in [{{scales}}]:
-    T ← 高斯模糊(音高缩放(样例单词, 倍率))
+for 变体 in 样例单词的 F、D、A 组合:
+    T ← 高斯模糊(变体)
     R ← 滑动窗口度量(M_G, T, 指标)
-最佳匹配 ← 所有倍率与位置中的最优值(R)
+最佳匹配 ← 所有变体与位置中的最优值(R)
 显示响应图(R, 最佳匹配)  # RMSE 取最小误差；图中映射为相似度`],
   matches: ["拼图编码与裁切", "输入：原谱 M、变体响应 R；输出：匹配、重构与分组片段集。", `U ← copy(M); 重构 ← 0; 匹配 ← []
 while 存在可用响应图:
@@ -2362,7 +2380,7 @@ while 存在可用响应图:
 for 命中 in 匹配:
     P ← 裁切原谱(M, 命中框,
         音高两侧扩展 = {{capturePitchMargin}} 半音, 前后扩展 = {{captureTimeMargin}} 格)
-    if P 含起音: 按命中单词分组追加(逆音高缩放(P, 命中倍率))
+    if P 含起音: 按命中单词分组追加(逆变换(P, 命中的 F、D、A))
 return 匹配, 重构, 片段集`],
   learning: ["字典重学习", "输入：按单词分组的片段集；输出：下一轮使用的字典 D。", `for 单词, 片段 in 片段集:
     if count(片段) < {{minimumCaptures}}: 释放槽位; continue
@@ -3191,7 +3209,7 @@ function showRecordedParameters(record) {
     words: config.initial_templates, height: config.initial_shape?.[0], width: config.initial_shape?.[1],
     noteMin: config.initial_note_count?.[0], noteMax: config.initial_note_count?.[1] - 1,
     durationMin: config.initial_duration?.[0], duration: config.initial_duration?.[1] - 1,
-    scales: config.pitch_scales?.join(", "), seed: record?.seed, attempts: config.max_template_attempts,
+    seed: record?.seed, attempts: config.max_template_attempts,
     similarity: config.uniqueness_threshold ?? record?.uniqueness,
     usefulness: config.usefulness_threshold ?? record?.usefulness,
     notePenalty: config.note_penalty, learnedPenalty: config.learned_penalty,
@@ -3293,8 +3311,7 @@ window.MusicWordParameters = {
       if (value === undefined || !copy.checkValidity()) throw new Error("ActiveBasis 参数超出允许范围：" + field.name);
     }
     const p = values.parameters;
-    if (!String(p.scales).split(",").every((value) => value.trim() && Number.isFinite(Number(value)) && Number(value) > 0) ||
-        [["noteMin", "noteMax"], ["durationMin", "duration"], ["learnedMin", "learnedMax"]]
+    if ([["noteMin", "noteMax"], ["durationMin", "duration"], ["learnedMin", "learnedMax"]]
           .some(([min, max]) => Number(p[min]) > Number(p[max]))) throw new Error("ActiveBasis 参数范围无效。");
     if (!(values.view.roundBatchCount === "" || (Number.isSafeInteger(Number(values.view.roundBatchCount)) && Number(values.view.roundBatchCount) > 0)) ||
         !["0", "1", "2", "3"].includes(String(values.view.windowSize)) || typeof values.view.blurred !== "boolean" ||

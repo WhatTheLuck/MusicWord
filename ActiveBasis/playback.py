@@ -86,7 +86,7 @@ def similarity_maps(target, kernel, padding):
 
 
 def similarity_examples(config):
-    from active_basis import Basis, blur, render_notes, scale_notes
+    from active_basis import Basis, blur, render_notes, transformed_variants
 
     shape = (12, 26)
     notes = [Basis(pitch, tick, 3) for pitch, tick in [(0, 0), (2, 4), (4, 8), (5, 12)]]
@@ -109,26 +109,27 @@ def similarity_examples(config):
         word = render_notes(word_notes, shape)
         target = render_notes(target_notes, shape)
         target_blurred = blur(target, config.blur_size, config.random_sigma)
+        transformed = list(transformed_variants(word_notes))
+        width = max(shape[1], max(note.tick + note.duration + 1 for _, notes in transformed for note in notes))
         variants = {}
-        for scale in config.pitch_scales:
-            scaled = scale_notes(word_notes, scale)
-            height = max(shape[0], max(note.pitch for note in scaled) + 1)
-            kernel = blur(render_notes(scaled, (height, shape[1])), config.blur_size, config.random_sigma)
-            variants[scale] = (kernel, similarity_maps(target_blurred, kernel, padding))
-        ceiling = max(1, target_blurred.max(), *(kernel.max() for kernel, _ in variants.values()))
+        for transform, variant_notes in transformed:
+            variant = render_notes(variant_notes, (shape[0], width))
+            kernel = blur(variant, config.blur_size, config.random_sigma)
+            variants[transform] = (variant, kernel, similarity_maps(target_blurred, kernel, padding))
+        ceiling = max(1, target_blurred.max(), *(kernel.max() for _, kernel, _ in variants.values()))
         scores = {}
         for metric in ("bacc", "zncc", "rmse"):
             if metric == "rmse":
-                scale = min(variants, key=lambda key: variants[key][1][metric].min())
+                transform = min(variants, key=lambda key: variants[key][2][metric].min())
             else:
-                scale = max(variants, key=lambda key: variants[key][1][metric].max())
-            kernel, maps = variants[scale]
+                transform = max(variants, key=lambda key: variants[key][2][metric].max())
+            variant, kernel, maps = variants[transform]
             raw = maps[metric]
             similarity = 1 - raw / ceiling if metric == "rmse" else raw
             position = np.unravel_index(similarity.argmax(), similarity.shape)
             response = np.clip(similarity, 0, 1)
             scores[metric] = {
-                "matchKernel": pack(kernel), "scale": scale,
+                "matchMatrix": pack_roll(variant), "matchKernel": pack(kernel), "transform": transform,
                 "response": float(response[position]), "rmse": float(raw[position]) if metric == "rmse" else None,
                 "responseMap": {
                     "matrix": pack(response, (0, 1)), "origin": -padding,
@@ -220,7 +221,7 @@ class PlaybackRecorder:
                     "position": [int(index) for index in np.unravel_index(matrix.argmax(), matrix.shape)],
                 }
             self.current["variants"].append({
-                "template": variant.template_id, "scale": variant.pitch_scale,
+                "template": variant.template_id, "transform": variant.transform,
                 "matrix": pack_roll(variant.matrix), "blurred": pack(variant.blurred, precise=True),
                 "responses": responses,
             })
@@ -231,7 +232,7 @@ class PlaybackRecorder:
     def match(self, song_index, match, score, start, before, after):
         bounds = (min(float(before.min()), float(after.min())), max(float(before.max()), float(after.max())))
         self.current["matches"].append({
-            "song": song_index, "template": match.template_id, "scale": match.pitch_scale,
+            "song": song_index, "template": match.template_id, "transform": match.transform,
             "box": [int(edge) for edge in match.box], "score": float(score), "start": int(start),
             "before": pack(before, bounds), "after": pack(after, bounds),
             "ranking": self.ranked,
@@ -293,4 +294,4 @@ class PlaybackRecorder:
             f'{annotation_script(self.data["songs"], self.data["track"])}\n'
             f'<script type="module">{script}</script>',
         )
-        output.write_text(html, encoding="utf-8")
+        output.write_text(html, encoding="utf-8", newline="\n")

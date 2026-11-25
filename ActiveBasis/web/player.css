@@ -465,7 +465,7 @@ canvas { display: block; width: 100%; }
 .annotation-option canvas { width: 62px; border-radius: 3px; background: var(--chart); }
 .annotation-option[aria-pressed="true"] { border-color: var(--accent); background: var(--accent-light); }
 .control-field > .parameter-input { width: 66px; }
-.control-field > .parameter-input[name="seed"], .control-field > input.scale-input { width: 118px; }
+.control-field > .parameter-input[name="seed"] { width: 118px; }
 .control-field > input.file-input { width: 100%; }
 .control-field > input[type="checkbox"] { accent-color: var(--accent); width: 18px; height: 18px; margin: 10px 0; }
 .control-field > input:disabled, select:disabled { color: var(--muted); background: var(--mw-raised, #eeeee5); cursor: default; }

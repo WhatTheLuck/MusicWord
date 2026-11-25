@@ -1,6 +1,8 @@
 """Active-basis dictionary learning on weighted piano rolls."""
 
 from dataclasses import dataclass
+from itertools import product
+from typing import NamedTuple
 
 import numpy as np
 from scipy import signal
@@ -8,6 +10,15 @@ from scipy import signal
 
 ONSET = 1.0
 SUSTAIN = 0.01
+FLIPS = (0, 1, 2, 3)
+DURATION_FACTORS = (1, 0.5, 1.5)
+ONSET_FACTORS = (1, 0.5, 2)
+
+
+class Transform(NamedTuple):
+    flip: int
+    duration: float
+    onset: float
 
 
 @dataclass(frozen=True)
@@ -17,7 +28,6 @@ class LearningConfig:
     initial_shape: tuple[int, int] = (10, 20)
     initial_note_count: tuple[int, int] = (5, 10)
     initial_duration: tuple[int, int] = (1, 20)
-    pitch_scales: tuple[float, ...] = (1.0, 0.8, 1.2)
     blur_size: int = 5
     random_sigma: float = 1.25
     learned_sigma: float = 1.0
@@ -59,7 +69,7 @@ class Template:
 @dataclass
 class Variant:
     template_id: int
-    pitch_scale: float
+    transform: Transform
     matrix: np.ndarray
     blurred: np.ndarray
     normalization: float
@@ -70,7 +80,7 @@ class Variant:
 class Match:
     box: tuple[int, int, int, int]
     template_id: int
-    pitch_scale: float
+    transform: Transform
 
 
 def render_notes(notes, shape=None):
@@ -81,8 +91,9 @@ def render_notes(notes, shape=None):
         )
     matrix = np.zeros(shape)
     for note in notes:
-        matrix[note.pitch, note.tick] = ONSET
         matrix[note.pitch, note.tick + 1:note.tick + note.duration] = SUSTAIN
+    for note in notes:
+        matrix[note.pitch, note.tick] = ONSET
     return matrix
 
 
@@ -137,8 +148,38 @@ def random_template(rng, config):
     return Template(notes, render_notes(notes, config.initial_shape))
 
 
-def scale_notes(notes, pitch_scale):
-    return [Basis(round(note.pitch * pitch_scale), note.tick, note.duration) for note in notes]
+def flip_notes(notes, flip, *, pitch_edge=0, time_edge=0):
+    """Reflect note extents while keeping each onset at the left of its note."""
+    if flip == 0:
+        return notes
+    pitch_edge = max(pitch_edge, max(note.pitch for note in notes))
+    time_edge = max(time_edge, max(note.tick + max(1, note.duration) - 1 for note in notes))
+    return [
+        Basis(
+            pitch_edge - note.pitch if flip & 2 else note.pitch,
+            time_edge - note.tick - max(1, note.duration) + 1 if flip & 1 else note.tick,
+            note.duration,
+        )
+        for note in notes
+    ]
+
+
+def resize_notes(notes, duration_factor, onset_factor):
+    return [
+        Basis(
+            note.pitch,
+            round(note.tick * onset_factor),
+            note.duration if duration_factor == 1 else max(1, round(max(1, note.duration) * duration_factor)),
+        )
+        for note in notes
+    ]
+
+
+def transformed_variants(notes):
+    for flip in FLIPS:
+        flipped = flip_notes(notes, flip)
+        for duration, onset in product(DURATION_FACTORS, ONSET_FACTORS):
+            yield Transform(flip, duration, onset), resize_notes(flipped, duration, onset)
 
 
 def prepare_variants(template_id, template, rolls, config):
@@ -148,8 +189,8 @@ def prepare_variants(template_id, template, rolls, config):
         penalty += config.learned_penalty
 
     variants = []
-    for pitch_scale in config.pitch_scales:
-        matrix = render_notes(scale_notes(template.notes, pitch_scale))
+    for transform, notes in transformed_variants(template.notes):
+        matrix = render_notes(notes)
         blurred = blur(matrix, config.blur_size, sigma)
         normalization = float(np.sum(blur(matrix, config.blur_size, sigma, "same") * matrix))
         responses = {
@@ -158,7 +199,7 @@ def prepare_variants(template_id, template, rolls, config):
             if all(size >= needed for size, needed in zip(roll.shape, blurred.shape))
         }
         if responses:
-            variants.append(Variant(template_id, pitch_scale, matrix, blurred, normalization, responses))
+            variants.append(Variant(template_id, transform, matrix, blurred, normalization, responses))
     return variants
 
 
@@ -231,7 +272,7 @@ def encode(rolls, variants, config, observer=None):
             break
         if observer is not None:
             observer.ranking([
-                (other.template_id, other.pitch_scale, float(values.max()))
+                (other.template_id, other.transform, float(values.max()))
                 for other, index, values in response_maps if index == song_index
             ])
 
@@ -241,7 +282,7 @@ def encode(rolls, variants, config, observer=None):
         np.maximum(region - variant.blurred, 0, out=region)
         raw_height, raw_width = variant.matrix.shape
         reconstructions[song_index][pitch:pitch + raw_height, tick:tick + raw_width] += variant.matrix
-        match = Match((tick, pitch, tick + width, pitch + height), variant.template_id, variant.pitch_scale)
+        match = Match((tick, pitch, tick + width, pitch + height), variant.template_id, variant.transform)
         matches[song_index].append(match)
 
         for other in variants:
@@ -272,15 +313,19 @@ def capture_patches(rolls, matches, dictionary_size, margin, observer=None, *, p
             patch = roll[bottom:top + pitch_margin, left:right + time_margin]
             notes = []
             for pitch, tick in np.argwhere(patch == ONSET):
-                # The original capture stage counts consecutive sustain cells after the onset.
-                duration = 0
+                duration = 1
                 for cell in patch[pitch, tick + 1:]:
                     if cell != SUSTAIN:
                         break
                     duration += 1
                 notes.append(Basis(int(pitch), int(tick), duration))
             if notes:
-                restored = render_notes(scale_notes(notes, 1 / match.pitch_scale))
+                flip, duration_factor, onset_factor = match.transform
+                resized = resize_notes(notes, 1 / duration_factor, 1 / onset_factor)
+                restored = render_notes(flip_notes(
+                    resized, flip, pitch_edge=patch.shape[0] - 1,
+                    time_edge=round((patch.shape[1] - 1) / onset_factor),
+                ))
                 datasets[match.template_id].append(restored)
                 if observer is not None:
                     observer.capture(song_index, match_index, patch, restored, len(datasets[match.template_id]))
