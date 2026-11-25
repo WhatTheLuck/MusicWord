@@ -18,7 +18,7 @@ from uuid import uuid4
 import numpy as np
 
 from midi_data import read_midi_as_track_dfs
-from ssm import SPLIT_MIN_BEATS, MatrixSizeError, run_singletrack_ssm_pipeline
+from ssm import PARENT_EDGE_TOLERANCE_BEATS, SPLIT_MIN_BEATS, MatrixSizeError, run_singletrack_ssm_pipeline
 
 ROOT = Path(__file__).resolve().parent
 WEB = ROOT / "web"
@@ -36,6 +36,7 @@ DEFAULTS = {
     "track": 0, "mode": "NCC", "tpb": 12, "stride": 1.0, "threshold": 0.45,
     "splitOverlaps": True, "minBeats": 4, "blurSize": 4, "blurSigma": 1.0, "sadSigma": 1.0,
     "splitMinBeats": SPLIT_MIN_BEATS,
+    "parentEdgeTolerance": PARENT_EDGE_TOLERANCE_BEATS,
     "onsetWeight": 1.0, "durationWeight": 0.2, "uniqueMinBeats": 4, "fillMinBeats": 0,
     "rectangleMinBeats": 2.0, "removeSelfSimilarity": True,
 }
@@ -43,6 +44,7 @@ LIMITS = {
     "track": (0, 4096), "tpb": (1, 96), "stride": (0.01, 16.0),
     "threshold": (0.0, 1.0), "minBeats": (1, 10),
     "splitMinBeats": (0.0, 10.0),
+    "parentEdgeTolerance": (0.0, 32768.0),
     "blurSize": (1, 15), "blurSigma": (0.1, 16.0), "sadSigma": (0.01, 32.0),
     "onsetWeight": (0.01, 4.0), "durationWeight": (0.0, 4.0),
     "uniqueMinBeats": (1, 10), "fillMinBeats": (0, 10),
@@ -179,6 +181,7 @@ def analyze(path, name, config, annotation_range=None):
         remove_self_similarity=config["removeSelfSimilarity"],
         unique_min_len_tick=config["uniqueMinBeats"] * tpb,
         fill_min_len_tick=config["fillMinBeats"] * tpb,
+        parent_edge_tolerance_beats=config["parentEdgeTolerance"],
         annotation_range=annotation_range,
     )
     pr, matrix = result["pr"], result["ssm_raw"]
@@ -191,6 +194,8 @@ def analyze(path, name, config, annotation_range=None):
         index = len(nodes)
         nodes.append({"start": node.start, "end": node.end, "class": node.shape_class,
                       "parent": parent, "depth": depth})
+        if hasattr(node, "match_bounds"):
+            nodes[-1]["matchBounds"] = node.match_bounds
         stack.extend((child, index, depth + 1) for child in reversed(node.children))
 
     meta = result["meta"]
@@ -357,6 +362,8 @@ def main():
     parser.add_argument("--threshold", type=float, default=DEFAULTS["threshold"])
     parser.add_argument("--split-overlaps", action=argparse.BooleanOptionalAction, default=DEFAULTS["splitOverlaps"])
     parser.add_argument("--split-min-beats", type=float, default=SPLIT_MIN_BEATS)
+    parser.add_argument("--parent-edge-tolerance", type=float, default=PARENT_EDGE_TOLERANCE_BEATS,
+                        help="Maximum parent-child edge difference to align, in beats")
     parser.add_argument("--min-beats", type=int, default=DEFAULTS["minBeats"])
     parser.add_argument("--rectangle-min-beats", type=float, default=DEFAULTS["rectangleMinBeats"])
     parser.add_argument("--remove-self-similarity", action=argparse.BooleanOptionalAction,
@@ -369,6 +376,7 @@ def main():
                               "threshold": args.threshold, "minBeats": args.min_beats,
                               "splitOverlaps": args.split_overlaps, "rectangleMinBeats": args.rectangle_min_beats,
                               "splitMinBeats": args.split_min_beats,
+                              "parentEdgeTolerance": args.parent_edge_tolerance,
                               "removeSelfSimilarity": args.remove_self_similarity})
         args.export.write_text(html_document(analyze(midi, midi.name if args.midi else label, config)), encoding="utf-8")
         print(args.export.resolve())

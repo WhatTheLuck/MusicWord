@@ -64,6 +64,9 @@
             </div>
             <div class="code-line"><code><b>输出</b> 矩形与保留的斜线，转置到上三角。短候选用虚线显示</code></div>
           </div>
+          <div class="code-block">
+            <div class="code-line with-parameters"><code><b>构建结构树后</b>，分别比较父子节点的起点和终点。边界差 ≤</code><label class="inline-param"><span>父节点边缘容差（拍）</span><input data-param="parentEdgeTolerance" type="number" min="0" max="32768" step="any" value="2" inputmode="decimal" required></label><code>时，将该边对齐到父节点边界</code></div>
+          </div>
           </div>
           <p class="method-result" id="lineParams"></p>
         </details>
@@ -126,6 +129,10 @@
             <div class="numeric-setting">
               <label>补齐片段下限（拍）<input name="fillMinBeats" type="number" min="0" max="10" value="0" required></label>
               <input data-param="fillMinBeats" data-ticks="1" type="range" min="0" max="10" step="1" value="0" aria-label="补齐片段下限（拍）滑动条">
+            </div>
+            <div class="numeric-setting">
+              <label>父节点边缘容差（拍）<input name="parentEdgeTolerance" type="number" min="0" max="32768" step="any" value="2" inputmode="decimal" required></label>
+              <input data-param="parentEdgeTolerance" type="range" min="0" max="10" step=".25" value="2" aria-label="父节点边缘容差（拍）滑动条">
             </div>
             <div class="numeric-setting">
               <label>截断片段下限（拍）<input name="splitMinBeats" type="number" min="0" max="10" step="any" value="2" required></label>

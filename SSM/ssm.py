@@ -8,8 +8,8 @@ from midi_data import DF2PR, DUR_WEIGHT, NOTE_ON_WEIGHT, TPB, read_midi_as_track
 from similarity import (BLUR_SIGMA, BLUR_SIZE, SSM_matrix, blur, compute_ssm,
                         cross_correlate, find_ssm_diag_lines, find_ssm_rectangles,
                         remove_redundant_ssm_diagonals, ssm_filter, stride_ticks)
-from structure import (build_hline_tree, layout_diag_lines, merge_similarity_transitive,
-                       normalize_intervals_with_cut)
+from structure import (PARENT_EDGE_TOLERANCE_BEATS, build_hline_tree, layout_diag_lines,
+                       merge_similarity_transitive, normalize_intervals_with_cut)
 
 SSM_BEAT_STRIDE = 1
 FILTER_THR = 0.3
@@ -85,6 +85,7 @@ def run_singletrack_ssm_pipeline(
     tree_overlap_policy: str = TREE_OVERLAP_POLICY,
     unique_min_len_tick: int | None = None,
     fill_min_len_tick: int | None = None,
+    parent_edge_tolerance_beats: float = PARENT_EDGE_TOLERANCE_BEATS,
     blur_size: int = BLUR_SIZE,
     blur_sigma: float = BLUR_SIGMA,
     max_frames: int | None = None,
@@ -221,6 +222,7 @@ def run_singletrack_ssm_pipeline(
         unique_min_len_tick=int(4 * int(tpb)) if unique_min_len_tick is None else int(unique_min_len_tick),
         fill_min_len_tick=int(4 * int(tpb)) if fill_min_len_tick is None else int(fill_min_len_tick),
         overlap_policy=str(tree_overlap_policy),
+        parent_edge_tolerance_tick=parent_edge_tolerance_beats * tpb,
     )
 
     nodes = [tree_root, *tree_root.descendants]

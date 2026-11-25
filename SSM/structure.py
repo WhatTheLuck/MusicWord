@@ -11,6 +11,9 @@ from anytree import Node
 from midi_data import TPB
 
 
+PARENT_EDGE_TOLERANCE_BEATS = 2.0
+
+
 def _shape_class_uuid_for_members(shape_members) -> str:
     """为一组相似片段生成**稳定**的 uuid 字符串。
 
@@ -275,7 +278,9 @@ def _fill_bottom_layer(root, midi_name):
             events[start] += 1
             events[end] -= 1
         else:
-            parents.append((start, node.end - node.start, order, end, node))
+            # When aligned spans tie, prefer the originally narrower parent.
+            original_start, original_end = getattr(node, "match_bounds", (node.start, node.end))
+            parents.append((start, node.end - node.start, original_end - original_start, order, end, node))
 
     candidates = iter(sorted(parents))
     candidate = next(candidates, None)
@@ -287,12 +292,12 @@ def _fill_bottom_layer(root, midi_name):
         while candidate is not None and candidate[0] <= start:
             heappush(active, candidate[1:])
             candidate = next(candidates, None)
-        while active and active[0][2] <= start:
+        while active and active[0][-2] <= start:
             heappop(active)
         if leaf_count:
             continue
 
-        parent = active[0][3]
+        parent = active[0][-1]
         if pending and pending[-1][0] is parent and pending[-1][2] == start:
             pending[-1] = (parent, pending[-1][1], end)
         else:
@@ -309,8 +314,9 @@ def build_hline_tree(diag_hlines_f, merged_info_f, midi_name: str, midi_tick_end
                     unique_min_len_tick: int = 4 * TPB,
                     fill_min_len_tick: int = 4 * TPB,
                     include_orphan_merged_segments: bool = True,
-                    overlap_policy: str = "cut"):
-    """按严格的时间区间包含关系组织匹配和补齐片段。
+                    overlap_policy: str = "cut",
+                    parent_edge_tolerance_tick: float = PARENT_EDGE_TOLERANCE_BEATS * TPB):
+    """按原始区间的严格包含关系建立层级，再对齐容差内的边界并补齐空隙。
 
     节点编号：midi名-层数-层中顺序
     """
@@ -380,6 +386,18 @@ def build_hline_tree(diag_hlines_f, merged_info_f, midi_name: str, midi_tick_end
                            if _strictly_contains((parent.start, parent.end), bounds)),
                           key=lambda parent: parent.end - parent.start)
         attached.append(node)
+
+    if parent_edge_tolerance_tick > 0:
+        # Compare the original edges so that aligning a parent cannot change which
+        # of its children qualify. Inherit the parent's already-aligned edge.
+        for node in temp_nodes:
+            parent = node.parent
+            parent_start, parent_end = getattr(parent, "match_bounds", (parent.start, parent.end))
+            start = parent.start if node.start - parent_start <= parent_edge_tolerance_tick else node.start
+            end = parent.end if parent_end - node.end <= parent_edge_tolerance_tick else node.end
+            if (start, end) != (node.start, node.end):
+                node.match_bounds = (node.start, node.end)
+                node.start, node.end = start, end
 
     def uncovered_parts(start, end, ancestor_count):
         index = bisect_right(boundaries, start) - 1

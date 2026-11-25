@@ -1394,10 +1394,11 @@ function overlap(a, b) {
 }
 function highlightTimeline(bounds, {frame, node} = {}) {
   const lines = new Set(), related = new Map();
+  const matchBounds = node?.matchBounds ?? bounds;
   for (const line of node ? node.lines : shownLines) {
     const {a, b} = pairFromLine(line);
     for (const [here, other] of [[a, b], [b, a]]) {
-      if (node ? here[0] !== bounds[0] || here[1] !== bounds[1] : !overlap(here, bounds)) continue;
+      if (node ? here[0] !== matchBounds[0] || here[1] !== matchBounds[1] : !overlap(here, bounds)) continue;
       lines.add(line);
       const match = node ? other : [other[0] + bounds[0] - here[0], other[0] + bounds[1] - here[0]];
       related.set(match[0] + "," + match[1], match);
@@ -1460,7 +1461,7 @@ function buildTreeItems(nodes) {
     }
     if (!classes.has(node.class)) classes.set(node.class, classes.size + 1);
     const classIndex = classes.get(node.class);
-    const key = [node.start, node.end].join(",");
+    const key = (node.matchBounds ?? [node.start, node.end]).join(",");
     const lines = linked.get(key) ?? [];
     const color = treeClassColors[classIndex - 1] ?? `hsl(${classIndex * 137.508 % 360} 68% 64%)`;
     items.push({...node, parent, label: "相似类 " + classIndex, color, classIndex, lines});
@@ -2015,7 +2016,8 @@ window.MusicWordParameters = {
     if (embedded) throw new Error("离线报告中的分析参数只读，请打开本地工作台。");
     if (!values || typeof values !== "object") throw new Error("SSM 参数方案无效。");
     for (const field of parameterFields) {
-      const value = values[field.name];
+      const value = field.name === "parentEdgeTolerance" && !Object.hasOwn(values, field.name)
+        ? field.defaultValue : values[field.name];
       const copy = field.cloneNode(true);
       copy.disabled = false;
       if (field.type === "checkbox") {
@@ -2040,7 +2042,7 @@ window.MusicWordParameters = {
   },
   apply(values) {
     this.validate(values);
-    setParameterValues(values);
+    setParameterValues({parentEdgeTolerance: form.elements.parentEdgeTolerance.defaultValue, ...values});
     setPadTreeParents(values.padTreeParents);
     if (showRectangles !== values.showRectangles) showRectanglesButton.click();
     if (showRawMatrix !== values.showRawMatrix) rawButton.click();
