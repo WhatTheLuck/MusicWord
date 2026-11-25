@@ -2420,19 +2420,42 @@ function algorithmControl(reference) {
   const help = get(source.getAttribute("aria-describedby"))?.textContent || "";
   input.removeAttribute("id");
   input.removeAttribute("name");
-  input.removeAttribute("required");
   input.removeAttribute("aria-describedby");
   input.setAttribute("form", "algorithm-display");
   input.className = "algorithm-input";
   input.setAttribute("aria-label", label);
   input.title = [label, help].filter(Boolean).join("：");
   if (source.type === "text") input.classList.add("algorithm-input-wide");
-  input.addEventListener(source.tagName === "SELECT" ? "change" : "input", () => {
-    source.value = input.value;
-    source.dispatchEvent(new Event(source.tagName === "SELECT" ? "change" : "input", { bubbles: true }));
+  const eventType = source.tagName === "SELECT" ? "change" : "input";
+  const applyValue = (value) => {
+    source.value = value;
+    source.dispatchEvent(new Event(eventType, { bubbles: true }));
     if (input.value !== source.value) input.value = source.value;
     syncAlgorithmControls();
-  });
+  };
+  if (source.type === "number") {
+    input.inputMode = source.step === "1" ? "numeric" : "decimal";
+    let edited = false;
+    input.addEventListener("input", () => { edited = true; });
+    // Commit the full number before the source control validates and constrains it.
+    input.addEventListener("blur", () => {
+      if (edited && input.validity.valid && input.value !== source.value) applyValue(input.value);
+      input.value = source.value;
+      edited = false;
+    });
+    input.addEventListener("keydown", (event) => {
+      if (event.key === "Enter") {
+        event.preventDefault();
+        if (input.reportValidity()) input.blur();
+      } else if (event.key === "Escape") {
+        input.value = source.value;
+        edited = false;
+      }
+    });
+  } else {
+    input.removeAttribute("required");
+    input.addEventListener(eventType, () => applyValue(input.value));
+  }
   // Options are populated asynchronously for the example metric selector.
   new MutationObserver(() => {
     if (source.tagName === "SELECT") input.replaceChildren(...[...source.options].map(option => option.cloneNode(true)));
@@ -2450,10 +2473,7 @@ function algorithmControl(reference) {
     slider.setAttribute("form", "algorithm-display");
     slider.setAttribute("aria-label", `${label} · 滑动调节`);
     slider.title = input.title;
-    slider.addEventListener("input", () => {
-      input.value = slider.value;
-      input.dispatchEvent(new Event("input", { bubbles: true }));
-    });
+    slider.addEventListener("input", () => applyValue(slider.value));
   }
   algorithmControls.push({ source, input, slider, blurKind });
   if (!slider) return input;
