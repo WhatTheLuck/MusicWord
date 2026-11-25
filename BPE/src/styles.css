@@ -329,9 +329,6 @@ button:disabled { opacity: .4; cursor: not-allowed; }
 .annotation-assist, .annotation-results { margin-top: 16px; min-width: 0; }
 .assist-heading { gap: 12px; flex-wrap: wrap; }
 .assist-heading > div { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; }
-.assist-template { display: flex; align-items: center; gap: 18px; padding: 16px; border-bottom: 1px solid var(--line); }
-.assist-template p { margin: 0; max-width: 70ch; color: var(--muted); font-size: 12px; line-height: 1.7; }
-.assist-template > button { flex: 0 0 180px; }
 .assist-preview { display: flex; align-items: center; gap: 10px; min-width: 0; padding: 6px; border: 1px solid var(--line); border-radius: 6px; color: var(--ink); background: var(--panel-2); cursor: pointer; }
 .assist-preview:hover { border-color: var(--accent); }
 .assist-preview svg:first-child { flex-shrink: 0; }
@@ -360,8 +357,6 @@ button:disabled { opacity: .4; cursor: not-allowed; }
 .assist-row-actions .secondary-button { min-height: 32px; padding-inline: 9px; }
 .assist-row-actions [aria-current="true"] { border-color: var(--accent); }
 @media (max-width: 700px) {
-  .assist-template { align-items: stretch; flex-direction: column; gap: 10px; }
-  .assist-template > button { flex-basis: auto; }
   .assist-candidate, .annotation-result-row { grid-template-columns: 45px minmax(0, 1fr); gap: 10px; }
   .assist-candidate > span, .assist-candidate-location, .annotation-result-row > span { grid-column: 2; }
   .assist-score { text-align: left; }

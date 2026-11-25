@@ -66,14 +66,8 @@ export function AnnotationSimilarity({ template, sourceTracks, annotationTracks,
   </label>;
   return <section className="panel annotation-assist" ref={panel} aria-labelledby="annotation-assist-title" style={{ '--word-color': color }}>
     <div className="panel-heading assist-heading">
-      <div><h2 id="annotation-assist-title">查找相似片段 · {category?.label ?? template.categoryId}</h2><span className="meta">L{template.level} · 以所选子例为模板</span></div>
+      <div><h2 id="annotation-assist-title">查找相似片段 · {category?.label ?? template.categoryId}</h2><span className="meta">L{template.level}</span></div>
       <button className="secondary-button" onClick={onClose}><X size={14} />关闭查找</button>
-    </div>
-    <div className="assist-template">
-      <button className="assist-preview" onClick={() => onPlay(template, 'match-template')} aria-label="试听查找模板">
-        <Play size={14} weight="fill" /><Preview word={template} active={playing?.key === 'match-template'} progress={playing?.progress} />
-      </button>
-      <p>{sourceTracks.find((track) => track.id === template.trackId)?.name} · {template.notes.length} 音符 · 起始第 {(Math.min(...template.notes.map((note) => note.onset)) / tpb + 1).toFixed(2)} 拍。按音高、相对起音时间和时长匹配；片段外的声部不参与比较。</p>
     </div>
     <form className="assist-form" ref={form} onSubmit={(event) => event.preventDefault()}>
       <div className="assist-parameters">
@@ -95,7 +89,7 @@ export function AnnotationSimilarity({ template, sourceTracks, annotationTracks,
     </form>
     <div className="assist-status" role="status" aria-live="polite">
       {busy ? '正在查找相似片段…' : error || (result ? result.candidates.length
-        ? `找到 ${result.total} 个片段${result.total > result.candidates.length ? `，预览相似度最高的 ${result.candidates.length} 个，可调大「最多预览」` : ''}。试听并勾选要接受的结果。`
+        ? `找到 ${result.total} 个片段${result.total > result.candidates.length ? `，按时间显示相似度最高的 ${result.candidates.length} 个` : ''}。试听并勾选要接受的结果。`
         : '未找到符合条件的片段。可降低最低相似度、增加容差或扩大查找范围。' : '')}
     </div>
     {Boolean(result?.candidates.length) && <>

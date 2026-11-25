@@ -83,6 +83,17 @@ describe('annotation similarity search', () => {
     expect(result.candidates).toHaveLength(1);
     expect(findSimilarAnnotationSegments({ template: { notes: [] }, sourceTracks: [] }).total).toBe(0);
   });
+
+  it('displays matches by start time after picking the highest-scoring previews', () => {
+    const earlier = phrase('b', 96);
+    earlier[1].duration += 2;
+    const events = [...earlier, ...phrase('c', 192)];
+    const parameters = { threshold: 90, durationTolerance: 35 };
+    const matches = find(events, parameters).candidates;
+    expect(matches.map(({ start }) => start)).toEqual([96, 192]);
+    expect(matches[0].score).toBeLessThan(matches[1].score);
+    expect(find(events, { ...parameters, maxResults: 1 }).candidates[0].start).toBe(192);
+  });
 });
 
 describe('assisted annotations remain editable', () => {

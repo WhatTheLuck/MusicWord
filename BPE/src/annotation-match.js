@@ -125,5 +125,6 @@ export function findSimilarAnnotationSegments({ template, sourceTracks, annotati
     candidate.noteIds.forEach((id) => ids.add(id));
     return true;
   });
-  return { candidates: candidates.slice(0, p.maxResults), total: candidates.length };
+  const preview = candidates.slice(0, p.maxResults).sort((a, b) => a.start - b.start);
+  return { candidates: preview, total: candidates.length };
 }
