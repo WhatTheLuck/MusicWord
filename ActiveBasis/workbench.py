@@ -12,6 +12,7 @@ from zipfile import BadZipFile, ZipFile
 
 
 ROOT = Path(__file__).resolve().parent
+CLASSICAL_ROOT = ROOT.parent / "midi-presets" / "classical"
 POP909 = Path(os.environ.get("ACTIVE_BASIS_POP909") or next(
     (path for path in (ROOT / "POP909-Dataset" / "POP909",
                        ROOT.parent.parent / "MidiParser" / "POP909") if path.is_dir()),
@@ -44,6 +45,11 @@ def catalog(root=POP909):
             if path.stem == path.parent.name]
 
 
+def classical_catalog():
+    manifest = CLASSICAL_ROOT / "index.json"
+    return json.loads(manifest.read_text(encoding="utf-8")) if manifest.is_file() else []
+
+
 def open_midi(request):
     from base64 import b64decode
     from mido import MidiFile
@@ -51,9 +57,12 @@ def open_midi(request):
     if request.get("midi"):
         return MidiFile(file=io.BytesIO(b64decode(request["midi"], validate=True)))
     ident = request.get("id", "")
-    if not re.fullmatch(r"[0-9]{3}", ident):
-        raise ValueError("请选择 POP909 曲目或本地 MIDI")
-    return MidiFile(POP909 / ident / (ident + ".mid"))
+    if re.fullmatch(r"[0-9]{3}", ident):
+        return MidiFile(POP909 / ident / (ident + ".mid"))
+    classical = next((song for song in classical_catalog() if song["id"] == ident), None)
+    if classical is None:
+        raise ValueError("请选择预制曲目或本地 MIDI")
+    return MidiFile(CLASSICAL_ROOT / classical["file"])
 
 
 def bounded(settings, key, default, minimum, maximum, cast=int):
@@ -280,7 +289,8 @@ def run(request):
         ]
         return dict(zip(METRIC_NAMES[:-1], np.mean(scores, axis=0).tolist()))
     if action == "catalog":
-        return catalog()
+        return catalog() + [{"id": song["id"], "name": song["name"], "collection": "classical"}
+                            for song in classical_catalog()]
     if action == "examples":
         from playback import similarity_examples
 

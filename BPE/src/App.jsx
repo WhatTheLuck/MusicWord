@@ -1410,7 +1410,7 @@ export default function App() {
         if (!response.ok) throw new Error('无法读取标注所用的 MIDI');
         return response.blob();
       })();
-      exportDocument.fileName = fileSource?.file?.name ?? `${midi.catalogId}.mid`;
+      exportDocument.fileName = fileSource?.file?.name ?? catalogSong?.file ?? `${midi.catalogId}.mid`;
       exportDocument.midi = shared ? await shared.fileBase64(file) : await new Promise((resolve, reject) => {
         const reader = new FileReader();
         reader.onload = () => resolve(reader.result.split(',')[1]);
@@ -1486,7 +1486,12 @@ export default function App() {
   const toolbarSlot = embedded ? window.frameElement?.ownerDocument.getElementById('bpe-round-slot') : null;
   const sourceSlot = embedded ? window.frameElement?.ownerDocument.getElementById('bpe-source-slot') : null;
   const localToolbar = !embedded || (!toolbarSlot && mode === 'algorithm');
-  const catalogSongLabel = (song) => song.name === song.id ? song.id : `${song.id} · ${song.name}`;
+  const catalogSongLabel = (song) => song.collection === 'classical' || song.name === song.id ? song.name : `${song.id} · ${song.name}`;
+  const catalogSong = songs.find((song) => song.id === midi?.catalogId);
+  const catalogGroups = [
+    ['经典曲目', songs.filter((song) => song.collection === 'classical')],
+    ['POP909 曲目', songs.filter((song) => song.collection !== 'classical')],
+  ];
   const annotatedSong = songs.find((song) => song.id === fileSource?.document?.song?.id);
   const importedLabel = annotatedSong ? `${catalogSongLabel(annotatedSong)}（标注）` :
     fileSource?.document?.song?.name ?? fileSource?.file?.name;
@@ -1496,9 +1501,9 @@ export default function App() {
       setSongId(event.target.value);
     }}>
     <option value="" hidden>{importedLabel ?? '选择曲目'}</option>
-    <optgroup label="POP909 预置曲目">
-      {songs.map((song) => <option key={song.id} value={song.id}>{catalogSongLabel(song)}</option>)}
-    </optgroup>
+    {catalogGroups.map(([label, group]) => group.length > 0 && <optgroup key={label} label={label}>
+      {group.map((song) => <option key={song.id} value={song.id}>{catalogSongLabel(song)}</option>)}
+    </optgroup>)}
   </select>;
   const sourceControls = <>
     <div ref={algorithmPicker} hidden={mode !== 'algorithm'} />
@@ -1578,7 +1583,7 @@ export default function App() {
         <section className="hero-strip">
           <div>{mode === 'algorithm' ? <h1>从事件流中发现<br /><em>重复的音乐语汇</em></h1> : <>
             <h1>人工音乐词标注</h1>
-            {midi && <p className="annotation-song-title">{midi.catalogId ? catalogSongLabel({ id: midi.catalogId, name: midi.name }) : midi.name}</p>}
+            {midi && <p className="annotation-song-title">{midi.catalogId ? catalogSongLabel(catalogSong ?? midi) : midi.name}</p>}
           </>}</div>
           {mode === 'algorithm' ? <div className="algorithm-actions">
             {embedded && <p className="algorithm-round">当前轮次 <b>{state?.round ?? 0}</b></p>}

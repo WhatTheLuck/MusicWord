@@ -598,7 +598,17 @@ function drawMetricHistory() {
   text("metricPoint", `第 ${selected + 1} 次 · 共 ${points.length} 次计算`);
 }
 
-async function initializeSharedAnnotations() {
+async function loadClassicalExamples() {
+  const songs = await request("./api/examples");
+  if (!songs.length) return null;
+  const group = document.createElement("optgroup");
+  group.label = "经典曲目";
+  group.append(...songs.map((song) => new Option(song.name, song.id)));
+  $("example").append(group);
+  return group;
+}
+
+async function initializeSharedAnnotations(classicalExamples) {
   const toolbar = window.frameElement?.ownerDocument.getElementById("ssm-source-slot") ??
     (location.pathname === "/ssm/" ? $("localSourceTools") : null);
   if (!toolbar) return;
@@ -639,12 +649,16 @@ async function initializeSharedAnnotations() {
   if (toolbar === $("localSourceTools")) toolbar.hidden = false;
   const examples = document.createElement("optgroup");
   examples.label = "SSM 示例";
-  examples.append(...Array.from(example.options).filter((option) => option.value).map((option) => option.cloneNode(true)));
+  examples.append(...Array.from(example.options).filter((option) => option.value && option.parentElement === example)
+    .map((option) => option.cloneNode(true)));
   midiPicker.setPresets([examples]);
+  const classical = await classicalExamples;
+  const presets = classical ? [examples, classical.cloneNode(true)] : [examples];
+  midiPicker.setPresets(presets);
   const group = document.createElement("optgroup");
   group.label = "POP909 曲目";
   try {
-    const songs = await sharedApi.pop909Catalog();
+    const songs = (await sharedApi.pop909Catalog()).filter((song) => song.collection !== "classical");
     group.append(...songs.map((song) => new Option(sharedApi.pop909Label(song), `pop909:${song.id}`)));
     if (!songs.length) group.append(new Option("暂无可用曲目", ""));
   } catch (error) {
@@ -653,7 +667,7 @@ async function initializeSharedAnnotations() {
     group.append(option);
   }
   example.append(group.cloneNode(true));
-  midiPicker.setPresets([examples, group]);
+  midiPicker.setPresets([...presets, group]);
 }
 
 function canvasContext(element) {
@@ -2074,5 +2088,6 @@ if (embedded) {
     window.MusicWordParameters.ready = true;
     if (!pending && !uploadedFile && !result) return run({example: true});
   });
-  initializeSharedAnnotations();
+  const classicalExamples = loadClassicalExamples().catch(() => null);
+  initializeSharedAnnotations(classicalExamples);
 }

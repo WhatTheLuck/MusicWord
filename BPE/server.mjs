@@ -10,6 +10,7 @@ const { Midi } = toneMidi;
 
 const root = path.dirname(fileURLToPath(import.meta.url));
 const datasetRoot = path.join(root, 'POP909');
+const classicalRoot = path.join(root, '..', 'midi-presets', 'classical');
 const parameterPath = path.join(root, PARAMETER_FILENAME);
 const app = express();
 app.use(cors());
@@ -19,10 +20,15 @@ app.use(express.json({ limit: '32kb' }));
 let catalogPromise;
 async function getCatalog() {
   catalogPromise ??= (async () => {
-    const [entries, names] = await Promise.all([
-      fs.readdir(datasetRoot, { withFileTypes: true }),
+    const absentCollection = (error) => {
+      if (error.code === 'ENOENT') return [];
+      throw error;
+    };
+    const [entries, names, classical] = await Promise.all([
+      fs.readdir(datasetRoot, { withFileTypes: true }).catch(absentCollection),
       // Song IDs and titles exported from POP909/index.xlsx.
       fs.readFile(path.join(root, 'pop909-titles.json'), 'utf8').then(JSON.parse),
+      fs.readFile(path.join(classicalRoot, 'index.json'), 'utf8').then(JSON.parse).catch(absentCollection),
     ]);
     const songs = [];
     for (const entry of entries.filter((item) => item.isDirectory()).sort((a, b) => a.name.localeCompare(b.name))) {
@@ -31,7 +37,7 @@ async function getCatalog() {
         ?? files.find((name) => /\.midi?$/i.test(name));
       if (main) songs.push({ id: entry.name, name: names[entry.name] ?? entry.name, file: main });
     }
-    return songs;
+    return [...songs, ...classical.map((song) => ({ ...song, collection: 'classical' }))];
   })();
   return catalogPromise;
 }
@@ -101,7 +107,8 @@ app.get('/api/midi/:id', async (req, res) => {
     const songs = await getCatalog();
     const song = songs.find((item) => item.id === req.params.id);
     if (!song) return res.status(404).json({ error: 'Song not found' });
-    const buffer = await fs.readFile(path.join(datasetRoot, song.id, song.file));
+    const directory = song.collection === 'classical' ? classicalRoot : path.join(datasetRoot, song.id);
+    const buffer = await fs.readFile(path.join(directory, song.file));
     if (req.query.raw === '1') return res.type('audio/midi').send(buffer);
     res.json(describeMidi(buffer, song.name, song.id));
   } catch (error) { res.status(500).json({ error: error.message }); }

@@ -18,13 +18,15 @@ npm start
 
 要自动打开浏览器，可运行 `npm start -- --open`。Windows 双击根目录的 `start.cmd` 也会执行这条命令。Linux 自动打开浏览器需要图形桌面和 `xdg-open`。
 
-- **标注**是默认打开的页面。可选择 POP909 曲目或导入 MIDI，逐层标注、试听并保存到共享标注库，也可导出包含源 MIDI 的 JSON。
-- **BPE** 提供 POP909 或自选 MIDI、钢琴卷帘、逐轮分词和词典。
+- **标注**是默认打开的页面。可选择经典曲目、POP909 或导入 MIDI，逐层标注、试听并保存到共享标注库，也可导出包含源 MIDI 的 JSON。
+- **BPE** 提供经典曲目、POP909 和自选 MIDI、钢琴卷帘、逐轮分词和词典。
 - **SSM**提供 MIDI 示例和上传、相似度矩阵、结构树及离线 HTML 导出。
-- **ActiveBasis**提供 POP909 或自选 MIDI 的本地训练、标注叠加和回放。
+- **ActiveBasis**提供经典曲目、POP909 和自选 MIDI 的本地训练、标注叠加和回放。
 - **LEGO** 提供 HW-Music Pattern 的 388 个音词、和弦映射、变奏、按拍编排、试听和 MIDI 导出。也可直接在浏览器打开 `LEGO/index.html` 离线使用。
 
 右上角的明暗切换会同步到各标签。BPE 与综合工作台中的 ActiveBasis 默认共用 `BPE/POP909`。BPE 参数保存在 `BPE/bpe-parameters.json`。
+
+标注、BPE、SSM 和 ActiveBasis 的「加载 MIDI」下拉栏都包含「经典曲目」分组，共 39 首。MIDI 原文件和曲谱来源表保存在 [midi-presets/classical](midi-presets/classical)。
 
 最顶部栏提供「本页」和「全部页面」两组相同的参数控件：预设下拉栏、加载配置文件的小按钮和「保存」按钮。选择预设后直接应用。点击「保存」后再输入名称，留空则自动命名；新预设会加入下拉栏，同时下载一份 JSON 配置文件。文件按钮可加载对应范围的 JSON，并将其加入预设列表。各页面的本页预设独立保存，刷新或重启后仍可选择。
 

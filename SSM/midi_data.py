@@ -1,5 +1,7 @@
 """MIDI loading and beat-aligned piano roll construction."""
 import hashlib
+from io import BytesIO
+from itertools import accumulate
 import json
 
 import mido
@@ -13,21 +15,54 @@ NOTE_ON_WEIGHT = 1.0
 DUR_WEIGHT = 0.2
 
 
+def _compact_midi_ticks(midi):
+    """Index only ticks with events when a dense tick table would be too large."""
+    if max((sum(message.time for message in track) for track in midi.tracks), default=0) + 1 <= pretty_midi.MAX_TICK:
+        return None
+    ticks = {0}
+    for track in midi.tracks:
+        ticks.update(accumulate(message.time for message in track))
+    original_ticks = sorted(ticks)
+    index = {tick: position for position, tick in enumerate(original_ticks)}
+    for track in midi.tracks:
+        tick = previous = 0
+        for message in track:
+            tick += message.time
+            current = index[tick]
+            message.time = current - previous
+            previous = current
+    return original_ticks
+
+
 def read_midi_as_track_dfs(path, use_tpb=TPB, *, annotation_range=None):
     """使用 pretty_midi 读取 MIDI，并将每个轨道转换为一个 DataFrame。
 
     注意：保留原始时间起点（不会把最早的 note_on 平移到 0）。
     """
 
-    pm = pretty_midi.PrettyMIDI(path)
+    midi = mido.MidiFile(path)
+    original_tpb = int(midi.ticks_per_beat)
+    original_ticks = _compact_midi_ticks(midi)
+    if original_ticks is None:
+        pm = pretty_midi.PrettyMIDI(path)
+    else:
+        with BytesIO() as buffer:
+            midi.save(file=buffer)
+            buffer.seek(0)
+            pm = pretty_midi.PrettyMIDI(buffer)
+
+    def source_tick(seconds):
+        tick = int(pm.time_to_tick(seconds))
+        return original_ticks[tick] if original_ticks is not None else tick
 
     tempo_times, tempi = pm.get_tempo_changes()
     if len(tempi) == 0:
         bpm = float(pm.estimate_tempo())
     else:
         bpm = float(tempi[0])
-
-    original_tpb = int(mido.MidiFile(path).ticks_per_beat)
+        if original_ticks is not None:
+            tempo_deltas = np.diff([source_tick(seconds) for seconds in tempo_times], prepend=0)
+            tempo_times = np.cumsum(tempo_deltas * 60 / (original_tpb * np.r_[tempi[0], tempi[:-1]]))
 
     instruments_meta = []
     for idx, inst in enumerate(pm.instruments):
@@ -61,7 +96,7 @@ def read_midi_as_track_dfs(path, use_tpb=TPB, *, annotation_range=None):
         rows = []
         source_notes = []
         for n in inst.notes:
-            start, end = int(pm.time_to_tick(n.start)), int(pm.time_to_tick(n.end))
+            start, end = source_tick(n.start), source_tick(n.end)
             source_notes.append((start, end, int(n.pitch)))
             if annotation_range is not None:
                 start, end = max(start, left), min(max(start + 1, end), right)

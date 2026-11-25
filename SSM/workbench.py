@@ -28,10 +28,14 @@ sys.path.append(str(ROOT.parent / "ActiveBasis"))
 from preview_assets import PREVIEW_ASSETS, preview_html
 
 PRESET_DIR = ROOT / "parameter_presets"
+CLASSICAL_ROOT = ROOT.parent / "midi-presets" / "classical"
+CLASSICAL_MANIFEST = CLASSICAL_ROOT / "index.json"
+CLASSICAL = json.loads(CLASSICAL_MANIFEST.read_text(encoding="utf-8")) if CLASSICAL_MANIFEST.is_file() else []
 EXAMPLES = {
-    "elise": ("Fr_Elise.mid", "贝多芬 · 致爱丽丝"),
-    "bach": ("Prelude_and_Fugue_in_E_major_BWV854.mid", "巴赫 · E 大调前奏曲与赋格 BWV 854"),
+    "elise": (ROOT / "examples" / "Fr_Elise.mid", "贝多芬 · 致爱丽丝"),
+    "bach": (ROOT / "examples" / "Prelude_and_Fugue_in_E_major_BWV854.mid", "巴赫 · E 大调前奏曲与赋格 BWV 854"),
 }
+EXAMPLES.update({song["id"]: (CLASSICAL_ROOT / song["file"], song["name"]) for song in CLASSICAL})
 DEFAULTS = {
     "track": 0, "mode": "NCC", "tpb": 12, "stride": 1.0, "threshold": 0.45,
     "splitOverlaps": True, "minBeats": 4, "blurSize": 4, "blurSigma": 1.0, "sadSigma": 1.0,
@@ -226,7 +230,7 @@ def analyze(path, name, config, annotation_range=None):
 @lru_cache(maxsize=4)
 def example_result(key, options):
     file, label = EXAMPLES[key]
-    return analyze(ROOT / "examples" / file, label, dict(options))
+    return analyze(file, label, dict(options))
 
 
 def html_document(payload=None):
@@ -280,6 +284,9 @@ class Handler(BaseHTTPRequestHandler):
                 self.send_json(list_presets())
             except OSError:
                 self.send_json({"error": "无法读取参数方案。"}, 500)
+            return
+        if url.path == "/api/examples":
+            self.send_json([{"id": song["id"], "name": song["name"]} for song in CLASSICAL])
             return
         if url.path != "/api/example":
             self.send_error(404)
@@ -371,7 +378,7 @@ def main():
     args = parser.parse_args()
     if args.export:
         file, label = EXAMPLES["elise"]
-        midi = args.midi or ROOT / "examples" / file
+        midi = args.midi or file
         config = config_from({"track": args.track, "mode": args.mode, "stride": args.stride,
                               "threshold": args.threshold, "minBeats": args.min_beats,
                               "splitOverlaps": args.split_overlaps, "rectangleMinBeats": args.rectangle_min_beats,

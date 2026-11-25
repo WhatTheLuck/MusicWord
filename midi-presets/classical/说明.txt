@@ -1,0 +1,12 @@
+经典曲目 MIDI 合集（39 首）
+
+39 首均为标准 Type 1 MIDI，每首一个文件。其中 38 首由工作区的 MusicXML 曲谱转出。
+包含独立乐章、钢琴改编和简化版。曲目表记录各文件对应的曲谱、来源和时长。
+部分踏板和渐强、渐弱记号未随转换保留。
+源曲谱来自 MuseTrainer 曲谱库。
+https://github.com/SpaceShaman/musicxml
+
+08 莫扎特 K.545 的工作区曲谱存在异常记号，改用 Mutopia Project 的 MIDI 原文件。
+制谱：Alejandro Sierra。许可证：CC BY-SA 3.0。
+https://www.mutopiaproject.org/cgibin/piece-info.cgi?id=998
+https://creativecommons.org/licenses/by-sa/3.0/

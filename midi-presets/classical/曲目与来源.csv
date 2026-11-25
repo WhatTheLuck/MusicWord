@@ -1,0 +1,40 @@
+﻿MIDI 文件,中文曲名,作曲者,时长（秒）,源曲谱文件,源曲谱版权标注,来源页面
+01 贝多芬 - 致爱丽丝.mid,致爱丽丝,贝多芬,130.79,Fur_Elise.musicxml,,https://github.com/SpaceShaman/musicxml/blob/master/scores/Fur_Elise.mxl
+02 贝多芬 - 月光奏鸣曲・第一乐章.mid,月光奏鸣曲・第一乐章,贝多芬,376.36,Sonate_No._14_Moonlight_1st_Movement.musicxml,,https://github.com/SpaceShaman/musicxml/blob/master/scores/Sonate_No._14_Moonlight_1st_Movement.mxl
+03 贝多芬 - 月光奏鸣曲・第三乐章.mid,月光奏鸣曲・第三乐章,贝多芬,401.12,Sonate_No._14_Moonlight_3rd_Movement.musicxml,,https://github.com/SpaceShaman/musicxml/blob/master/scores/Sonate_No._14_Moonlight_3rd_Movement.mxl
+04 贝多芬 - 悲怆奏鸣曲・第二乐章.mid,悲怆奏鸣曲・第二乐章,贝多芬,278.1,Sonate_No._8_Pathetique_2nd_Movement.musicxml,,https://github.com/SpaceShaman/musicxml/blob/master/scores/Sonate_No._8_Pathetique_2nd_Movement.mxl
+05 贝多芬 - 欢乐颂（简易变奏）.mid,欢乐颂（简易变奏）,贝多芬,29.14,Ode_to_Joy_Easy_variation.musicxml,,https://github.com/SpaceShaman/musicxml/blob/master/scores/Ode_to_Joy_Easy_variation.mxl
+06 贝多芬 - 第五交响曲・第一乐章（钢琴独奏版）.mid,第五交响曲・第一乐章（钢琴独奏版）,贝多芬,392.35,Beethoven_Symphony_No._5_1st_movement_Piano_solo.musicxml,,https://github.com/SpaceShaman/musicxml/blob/master/scores/Beethoven_Symphony_No._5_1st_movement_Piano_solo.mxl
+07 莫扎特 - 土耳其进行曲.mid,土耳其进行曲,莫扎特,223.0,Piano_Sonata_No._11_K._331_3rd_Movement_Rondo_alla_Turca.musicxml,,https://github.com/SpaceShaman/musicxml/blob/master/scores/Piano_Sonata_No._11_K._331_3rd_Movement_Rondo_alla_Turca.mxl
+08 莫扎特 - 第十六钢琴奏鸣曲 K.545・第一乐章.mid,第十六钢琴奏鸣曲 K.545・第一乐章,莫扎特,132.27,K545-1.mid（直接收录）,CC BY-SA 3.0（Alejandro Sierra / Mutopia Project）,https://www.mutopiaproject.org/cgibin/piece-info.cgi?id=998
+09 莫扎特 - 小星星变奏曲 K.265.mid,小星星变奏曲 K.265,莫扎特,687.5,12_Variations_of_Twinkle_Twinkle_Little_Star.musicxml,,https://github.com/SpaceShaman/musicxml/blob/master/scores/12_Variations_of_Twinkle_Twinkle_Little_Star.mxl
+10 莫扎特 - 安魂曲・落泪之日.mid,安魂曲・落泪之日,莫扎特,168.75,Lacrimosa_-_Requiem.musicxml,,https://github.com/SpaceShaman/musicxml/blob/master/scores/Lacrimosa_-_Requiem.mxl
+11 肖邦 - 降 B 小调夜曲 Op.9 No.1.mid,降 B 小调夜曲 Op.9 No.1,肖邦,270.9,Chopin_-_Nocturne_Op._9_No._1.musicxml,,https://github.com/SpaceShaman/musicxml/blob/master/scores/Chopin_-_Nocturne_Op._9_No._1.mxl
+12 肖邦 - 降 E 大调夜曲 Op.9 No.2.mid,降 E 大调夜曲 Op.9 No.2,肖邦,213.83,Chopin_-_Nocturne_Op_9_No_2_E_Flat_Major.musicxml,,https://github.com/SpaceShaman/musicxml/blob/master/scores/Chopin_-_Nocturne_Op_9_No_2_E_Flat_Major.mxl
+13 肖邦 - 升 C 小调夜曲.mid,升 C 小调夜曲,肖邦,233.06,Nocturne_in_C_sharp_Minor.musicxml,,https://github.com/SpaceShaman/musicxml/blob/master/scores/Nocturne_in_C_sharp_Minor.mxl
+14 肖邦 - G 小调第一叙事曲 Op.23.mid,G 小调第一叙事曲 Op.23,肖邦,657.94,Chopin_-_Ballade_no._1_in_G_minor_Op._23.musicxml,,https://github.com/SpaceShaman/musicxml/blob/master/scores/Chopin_-_Ballade_no._1_in_G_minor_Op._23.mxl
+15 肖邦 - E 小调前奏曲 Op.28 No.4.mid,E 小调前奏曲 Op.28 No.4,肖邦,121.2,Prlude_No._4_in_E_Minor_Op._28_-_Frdric_Chopin.musicxml,Public Domain,https://github.com/SpaceShaman/musicxml/blob/master/scores/Prlude_No._4_in_E_Minor_Op._28_-_Frdric_Chopin.mxl
+16 肖邦 - A 小调圆舞曲.mid,A 小调圆舞曲,肖邦,120.0,Waltz_in_A_MinorChopin.musicxml,,https://github.com/SpaceShaman/musicxml/blob/master/scores/Waltz_in_A_MinorChopin.mxl
+17 肖邦 - 升 C 小调圆舞曲 Op.64 No.2.mid,升 C 小调圆舞曲 Op.64 No.2,肖邦,222.88,Waltz_Opus_64_No._2_in_C_Minor.musicxml,,https://github.com/SpaceShaman/musicxml/blob/master/scores/Waltz_Opus_64_No._2_in_C_Minor.mxl
+18 巴赫 - C 大调前奏曲 BWV 846.mid,C 大调前奏曲 BWV 846,巴赫,119.14,Prelude_I_in_C_major_BWV_846_-_Well_Tempered_Clavier_First_Book.musicxml,,https://github.com/SpaceShaman/musicxml/blob/master/scores/Prelude_I_in_C_major_BWV_846_-_Well_Tempered_Clavier_First_Book.mxl
+19 巴赫 - C 小调前奏曲 BWV 847.mid,C 小调前奏曲 BWV 847,巴赫,82.51,Prelude_No._2_BWV_847_in_C_Minor.musicxml,,https://github.com/SpaceShaman/musicxml/blob/master/scores/Prelude_No._2_BWV_847_in_C_Minor.mxl
+20 克里斯蒂安·佩措尔德 - G 大调小步舞曲 BWV Anh.114.mid,G 大调小步舞曲 BWV Anh.114,克里斯蒂安·佩措尔德,91.43,Bach_Minuet_in_G_Major_BWV_Anh._114.musicxml,Public Domain (PianoXML typeset),https://github.com/SpaceShaman/musicxml/blob/master/scores/Bach_Minuet_in_G_Major_BWV_Anh._114.mxl
+21 巴赫 - G 弦上的咏叹调（钢琴改编）.mid,G 弦上的咏叹调（钢琴改编）,巴赫,261.82,J._S._Bach_-_Air_on_the_G_String_Piano_arrangement.musicxml,,https://github.com/SpaceShaman/musicxml/blob/master/scores/J._S._Bach_-_Air_on_the_G_String_Piano_arrangement.mxl
+22 巴赫（传统归属） - D 小调托卡塔与赋格（钢琴独奏版）.mid,D 小调托卡塔与赋格（钢琴独奏版）,巴赫（传统归属）,445.79,Bach_Toccata_and_Fugue_in_D_Minor_Piano_solo.musicxml,,https://github.com/SpaceShaman/musicxml/blob/master/scores/Bach_Toccata_and_Fugue_in_D_Minor_Piano_solo.mxl
+23 帕赫贝尔 - D 大调卡农.mid,D 大调卡农,帕赫贝尔,244.8,Canon_in_D.musicxml,,https://github.com/SpaceShaman/musicxml/blob/master/scores/Canon_in_D.mxl
+24 德彪西 - 月光.mid,月光,德彪西,273.52,Clair_de_Lune__Debussy.musicxml,,https://github.com/SpaceShaman/musicxml/blob/master/scores/Clair_de_Lune__Debussy.mxl
+25 德彪西 - 第一阿拉伯风格曲.mid,第一阿拉伯风格曲,德彪西,212.17,Arabesque_L._66_No._1_in_E_Major.musicxml,,https://github.com/SpaceShaman/musicxml/blob/master/scores/Arabesque_L._66_No._1_in_E_Major.mxl
+26 萨蒂 - 第一吉诺佩第舞曲.mid,第一吉诺佩第舞曲,萨蒂,225.98,Erik_Satie_-_Gymnopedie_No.1.musicxml,,https://github.com/SpaceShaman/musicxml/blob/master/scores/Erik_Satie_-_Gymnopedie_No.1.mxl
+27 萨蒂 - 第一格诺西安舞曲.mid,第一格诺西安舞曲,萨蒂,190.59,Gnossienne_No._1.musicxml,,https://github.com/SpaceShaman/musicxml/blob/master/scores/Gnossienne_No._1.mxl
+28 舒伯特 - 圣母颂 D.839（钢琴改编）.mid,圣母颂 D.839（钢琴改编）,舒伯特,190.8,Ave_Maria_D839_-_Schubert_-_Solo_Piano_Arrg..musicxml,,https://github.com/SpaceShaman/musicxml/blob/master/scores/Ave_Maria_D839_-_Schubert_-_Solo_Piano_Arrg..mxl
+29 舒伯特 - 小夜曲（李斯特改编）.mid,小夜曲（李斯特改编）,舒伯特,356.9,Schubert_Serenade_-_Standchen_-_By_Lizst.musicxml,,https://github.com/SpaceShaman/musicxml/blob/master/scores/Schubert_Serenade_-_Standchen_-_By_Lizst.mxl
+30 李斯特 - 钟.mid,钟,李斯特,270.14,La_Campanella_-_Grandes_Etudes_de_Paganini_No._3_-_Franz_Liszt.musicxml,,https://github.com/SpaceShaman/musicxml/blob/master/scores/La_Campanella_-_Grandes_Etudes_de_Paganini_No._3_-_Franz_Liszt.mxl
+31 李斯特 - 爱之梦第三首.mid,爱之梦第三首,李斯特,230.29,Liebestraum_No._3_in_A_Major.musicxml,,https://github.com/SpaceShaman/musicxml/blob/master/scores/Liebestraum_No._3_in_A_Major.mxl
+32 勃拉姆斯 - 第五匈牙利舞曲.mid,第五匈牙利舞曲,勃拉姆斯,166.36,Hungarian_Dance_No_5_in_G_Minor.musicxml,,https://github.com/SpaceShaman/musicxml/blob/master/scores/Hungarian_Dance_No_5_in_G_Minor.mxl
+33 柴可夫斯基 - 糖梅仙子之舞.mid,糖梅仙子之舞,柴可夫斯基,90.86,Dance_of_the_sugar_plum_fairy.musicxml,,https://github.com/SpaceShaman/musicxml/blob/master/scores/Dance_of_the_sugar_plum_fairy.mxl
+34 柴可夫斯基 - 天鹅湖.mid,天鹅湖,柴可夫斯基,64.8,Swan_Lake.musicxml,,https://github.com/SpaceShaman/musicxml/blob/master/scores/Swan_Lake.mxl
+35 柴可夫斯基 - 花之圆舞曲.mid,花之圆舞曲,柴可夫斯基,89.84,Waltz_of_the_Flowers.musicxml,,https://github.com/SpaceShaman/musicxml/blob/master/scores/Waltz_of_the_Flowers.mxl
+36 里姆斯基-科萨科夫 - 野蜂飞舞.mid,野蜂飞舞,里姆斯基-科萨科夫,83.54,Flight_of_the_Bumblebee.musicxml,,https://github.com/SpaceShaman/musicxml/blob/master/scores/Flight_of_the_Bumblebee.mxl
+37 斯科特·乔普林 - 枫叶拉格.mid,枫叶拉格,斯科特·乔普林,129.07,Maple_Leaf_Rag_Scott_Joplin.musicxml,,https://github.com/SpaceShaman/musicxml/blob/master/scores/Maple_Leaf_Rag_Scott_Joplin.mxl
+38 斯科特·乔普林 - 演艺人.mid,演艺人,斯科特·乔普林,302.25,The_Entertainer_-_Scott_Joplin_-_1902.musicxml,Public Domain,https://github.com/SpaceShaman/musicxml/blob/master/scores/The_Entertainer_-_Scott_Joplin_-_1902.mxl
+39 英格兰传统民谣 - 绿袖子（简易钢琴版）.mid,绿袖子（简易钢琴版）,英格兰传统民谣,48.5,Greensleeves_for_Piano_easy_and_beautiful.musicxml,,https://github.com/SpaceShaman/musicxml/blob/master/scores/Greensleeves_for_Piano_easy_and_beautiful.mxl

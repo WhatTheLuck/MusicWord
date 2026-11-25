@@ -509,7 +509,7 @@ function viewInput(view, panel) {
   const song = currentSong();
   const preview = inputPreview ?? song?.preview ?? (song && legacyPreview(song));
   if (!preview) {
-    view.append(element("p", "stage-status", "选择一首 POP909 曲目或导入本地 MIDI。"));
+    view.append(element("p", "stage-status", "选择预制曲目或导入本地 MIDI。"));
     return;
   }
   const raw = preview.source ?? matrix(preview.roll);
@@ -1993,9 +1993,9 @@ inputAnnotationGroup.id = "input-annotation-group";
 inputAnnotationGroup.setAttribute("role", "group");
 inputAnnotationGroup.setAttribute("aria-label", "标注类别");
 let activeAnnotationGroup = "";
-const songLabel = field("曲目", songSelect, "切换 POP909 曲目会载入新乐谱并重新训练。");
+const songLabel = field("曲目", songSelect, "切换预制曲目会载入新乐谱并重新训练。");
 const fileLabel = field("导入乐谱", upload, "支持 MIDI、MusicXML 和压缩 MusicXML。导入后可选择音轨。");
-const sourceLabel = field("来源", sourceMode, "选择从 POP909 曲库读取，或导入本地 MIDI。");
+const sourceLabel = field("来源", sourceMode, "选择预制曲目，或导入本地 MIDI。");
 const trainButton = button("运行训练", "action-button primary");
 const cancelButton = button("取消训练", "action-button cancel-training");
 cancelButton.hidden = true;
@@ -2181,7 +2181,7 @@ function launchControls() {
     control.title = help.textContent;
   }
   kernelControls.prepend(...kernelFields);
-  refreshChoices(sourceMode, [["POP909", "pop"], ["本地 MIDI", "local"]]);
+  refreshChoices(sourceMode, [["预制曲目", "pop"], ["本地 MIDI", "local"]]);
   sourceRow.append(sourceLabel, songLabel, fileLabel, field("音轨", trackSelect, "切换量化预览和训练所用的 MIDI 音轨。"),
     parameter("resolution", "TPB", "每拍刻度数（Ticks Per Beat）。越大，量化越细，同样长的乐谱占用的时间格越多。", 24, 4, 96));
   fileLabel.hidden = true;
@@ -2895,10 +2895,7 @@ async function initializeSharedAnnotations() {
         loadSource();
       },
     });
-    const presets = element("optgroup", "");
-    presets.label = "POP909 预置曲目";
-    presets.append(...Array.from(songSelect.options, (option) => option.cloneNode(true)));
-    midiPicker.setPresets([presets]);
+    midiPicker.setPresets(Array.from(songSelect.children, (group) => group.cloneNode(true)));
     const download = upload.nextElementSibling;
     if (download?.matches(".mw-converted-midi")) toolbar.append(download);
     sourceLabel.hidden = songLabel.hidden = fileLabel.hidden = true;
@@ -2979,7 +2976,7 @@ async function loadSource(keepRecord = false) {
   syncMidiPicker();
   refreshChoices(trackSelect, []);
   if ((local && !localSource) || (!local && !songSelect.value)) {
-    status.textContent = local ? "选择 MIDI 或 MusicXML 文件。" : "找不到 POP909。可导入本地乐谱。";
+    status.textContent = local ? "选择 MIDI 或 MusicXML 文件。" : "没有可用的预制曲目。可导入本地乐谱。";
     return;
   }
   const controller = new AbortController();
@@ -3240,7 +3237,19 @@ async function initialize() {
   }
   if (live) {
     const recordedSong = currentSong()?.id;
-    const selected = refreshChoices(songSelect, songs.map((song) => [`${song.name} · ${song.id}`, song.id]), recordedSong);
+    const classical = element("optgroup", "");
+    classical.label = "经典曲目";
+    const pop909 = element("optgroup", "");
+    pop909.label = "POP909 曲目";
+    for (const song of songs) {
+      const isClassical = song.collection === "classical";
+      const group = isClassical ? classical : pop909;
+      group.append(new Option(isClassical ? song.name : `${song.name} · ${song.id}`, song.id));
+    }
+    songSelect.replaceChildren(...[classical, pop909].filter((group) => group.children.length));
+    const selected = songs.some((song) => song.id === recordedSong) ? recordedSong : songs[0]?.id ?? "";
+    songSelect.value = selected;
+    songSelect.disabled = !selected;
     if (!selected || (recordedSong && recordedSong !== selected)) sourceMode.value = "local";
     initializeSharedAnnotations();
     await Promise.all([loadSource(Boolean(record)), computeExamples()]);
