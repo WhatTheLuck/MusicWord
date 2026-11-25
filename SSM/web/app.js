@@ -346,12 +346,13 @@ async function run({file, example, pop909, inspect = Boolean(pop909), annotation
     status("正在计算自相似矩阵…");
     setMatchCount("正在更新匹配…");
     const data = await request((uploadedFile ? "./api/analyze?" : "./api/example?") + values, requestOptions(uploadedFile));
+    if (!(data.version >= 2) || data.config?.parentEdgeTolerance !== Number(values.get("parentEdgeTolerance")) ||
+        !Array.isArray(data.rectangles) || !Array.isArray(data.rectangleRemovedCounts) ||
+        !Number.isInteger(data.removedLineCount)) {
+      throw new Error("SSM 分析服务仍在运行旧版本。请重启本地工作台后刷新页面。");
+    }
     if (scope?.window && !data.annotationRange) {
       throw new Error("请重启工作台，以启用按标注时间范围分析。");
-    }
-    if (!Array.isArray(data.rectangles) || !Array.isArray(data.rectangleRemovedCounts) ||
-        !Number.isInteger(data.removedLineCount)) {
-      throw new Error("当前分析服务版本较旧。重启本地工作台后刷新页面，即可检测矩形和去除自相似。");
     }
     if (requestRevision === revision) {
       resultFile = uploadedFile;

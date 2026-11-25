@@ -209,7 +209,7 @@ def analyze(path, name, config, annotation_range=None):
         previous_time, previous_bpm = float(second), float(bpm)
 
     return {
-        "version": 1, "name": name, "config": config, "tracks": track_meta(meta),
+        "version": 2, "name": name, "config": config, "tracks": track_meta(meta),
         "bpm": meta["bpm"], "tempos": tempos, "tpb": tpb, "stride": result["stride_tick"],
         "ticks": pr.shape[1], "pitchStart": result["pitch_start"], "pitches": pr.shape[0],
         "annotationRange": annotation_range,
